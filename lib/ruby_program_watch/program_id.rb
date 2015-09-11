@@ -30,8 +30,17 @@ module RubyProgramWatch
         # 
         # @return [void]
         def register_loaded_features
+            search_path = ruby_load_path
             $LOADED_FEATURES.each do |file|
-                register_file(Pathname.new(file))
+                # enumerator.so is listed in $LOADED_FEATURES but is not present
+                # on disk ... no idea
+                begin
+                    begin
+                        register_file(Pathname.new(file))
+                    rescue FileNotFound => e
+                        STDERR.puts "WARN: could not find #{e.path} in ruby search path, ignored"
+                    end
+                end
             end
         end
 
@@ -115,15 +124,11 @@ module RubyProgramWatch
             id   = compute_file_id(resolved)
             return FileInfo.new(path, resolved, stat.mtime, stat.size, id)
         end
-    
-        # Compute a SHA1 that is representative of the file's contents
+
+        # @api private
         #
-        # It does some whitespace cleanup, but is not meant to be super-robust
-        # to changes that are irrelevant to the end program
-        #
-        # @param [Pathname] file the path to the file
-        # @return [String] an ID string
-        def compute_file_id(file)
+        # Compute the content ID of a text (code) file
+        def compute_text_file_id(file)
             sanitized = file.readlines.map do |line|
                 # Remove unnecessary spaces
                 line = line.strip
@@ -133,6 +138,28 @@ module RubyProgramWatch
                 end
             end.compact
             Digest::SHA1.hexdigest(sanitized.join("\n"))
+        end
+
+        # @api private
+        #
+        # Compute the content ID of a binary file
+        def compute_binary_file_id(file)
+            Digest::SHA1.hexdigest(file.read(enc: 'BINARY'))
+        end
+    
+        # Compute a SHA1 that is representative of the file's contents
+        #
+        # It does some whitespace cleanup, but is not meant to be super-robust
+        # to changes that are irrelevant to the end program
+        #
+        # @param [Pathname] file the path to the file
+        # @return [String] an ID string
+        def compute_file_id(file)
+            if file.extname == ".rb"
+                compute_text_file_id(file)
+            else
+                compute_binary_file_id(file)
+            end
         end
     end
 end

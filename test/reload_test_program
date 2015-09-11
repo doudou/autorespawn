@@ -1,0 +1,9 @@
+#! /usr/bin/env ruby
+
+require 'ruby_program_watch'
+require ENV['TEST_REQUIRE']
+
+RubyProgramWatch::Watch.autoreload Gem.ruby, $0 do
+    STDOUT.puts Process.pid
+    STDOUT.flush
+end

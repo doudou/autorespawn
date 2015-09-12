@@ -93,7 +93,7 @@ module Autorespawn
 
         describe "#compute_file_id" do
             it "sanitizes spaces before computing the hash" do
-                File.open('/file', 'w') do |io|
+                File.open('/file.rb', 'w') do |io|
                     io.puts
                     io.puts "  "
                     io.puts "    line  "
@@ -102,8 +102,7 @@ module Autorespawn
                     io.puts
                 end
                 expected = ["line", "two three", "and four"].join("\n")
-                assert_equal Digest::SHA1.hexdigest(expected),
-                    subject.compute_file_id(Pathname.new('/file'))
+                assert Digest::SHA1.hexdigest(expected) == subject.compute_file_id(Pathname.new('/file.rb'))
             end
         end
 

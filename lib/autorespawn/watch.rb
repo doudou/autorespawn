@@ -1,4 +1,4 @@
-module RubyProgramWatch
+module Autorespawn
     # Functionality to watch a program for change
     class Watch
         # Create a pipe and dump the program ID state of the current program
@@ -33,7 +33,7 @@ module RubyProgramWatch
             end
 
             # Check if we're being called by an autoreload call already
-            if ENV['RUBY_PROGRAM_WATCH_AUTORELOAD']
+            if ENV['autorespawn_AUTORELOAD']
                 program_id = Marshal.load(STDIN)
                 if !program_id.changed?
                     # We can do what is required of us and wait for changes
@@ -42,12 +42,12 @@ module RubyProgramWatch
                 end
 
                 r, w = dump_self_id
-                exec(Hash['RUBY_PROGRAM_WATCH_AUTORELOAD' => '1'], *command,
+                exec(Hash['autorespawn_AUTORELOAD' => '1'], *command,
                      in: r, **options)
             else
                 begin
                     r, w = dump_self_id
-                    pid = spawn(Hash['RUBY_PROGRAM_WATCH_AUTORELOAD' => '1'], *command,
+                    pid = spawn(Hash['autorespawn_AUTORELOAD' => '1'], *command,
                                 in: r, pgroup: true, **options)
                     w.close
                     r.close

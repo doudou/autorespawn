@@ -1,8 +1,8 @@
-require 'ruby_program_watch/program_id'
+require 'autorespawn/program_id'
 require 'pathname'
 require 'digest/sha1'
 
-module RubyProgramWatch
+module Autorespawn
     # Management of the ID of a complete Ruby program
     #
     # It basically stores information about all the files that form this

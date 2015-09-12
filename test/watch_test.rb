@@ -1,7 +1,7 @@
 require 'test_helper'
-require 'ruby_program_watch/program_id'
+require 'autorespawn/program_id'
 
-module RubyProgramWatch
+module Autorespawn
     describe Watch do
         describe 'autoreload' do
             after do
@@ -39,7 +39,7 @@ module RubyProgramWatch
             end
 
             def spawn_test_program
-                required_file = Tempfile.open ['ruby_program_watch', '.rb']
+                required_file = Tempfile.open ['autorespawn', '.rb']
                 r, w = IO.pipe
                 @pid = Kernel.spawn Hash['TEST_REQUIRE' => required_file.path],
                     reload_test_program, "-I#{test_dir}", out: w

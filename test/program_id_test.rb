@@ -1,8 +1,8 @@
 require 'test_helper'
-require 'ruby_program_watch/program_id'
+require 'autorespawn/program_id'
 require 'fakefs/safe'
 
-module RubyProgramWatch
+module Autorespawn
     describe ProgramID do
         subject { ProgramID.new }
 

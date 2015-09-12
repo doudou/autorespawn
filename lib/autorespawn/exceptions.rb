@@ -1,4 +1,4 @@
-module RubyProgramWatch
+module Autorespawn
     # Exception raised when a path cannot be resolved to a file on disk
     class FileNotFound < RuntimeError
         # @return [Pathname] the path to resolve

@@ -1,5 +1,24 @@
 #! /usr/bin/env ruby
 
+level = Integer(ENV['TEST_LEVEL'] ||= '0')
+level += 1
+ENV['TEST_LEVEL'] = level.to_s
+
+begin
+    require 'simplecov'
+    require 'coveralls'
+    SimpleCov.formatter = SimpleCov::Formatter::MultiFormatter[
+        SimpleCov::Formatter::HTMLFormatter,
+        Coveralls::SimpleCov::Formatter
+    ]
+    SimpleCov.start do
+        command_name "reload_test_program-#{level}"
+        add_filter "/test/"
+    end
+rescue LoadError
+end
+
+
 require 'autorespawn'
 require ENV['TEST_REQUIRE']
 

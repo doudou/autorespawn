@@ -1,5 +1,8 @@
 # Autorespawn
 
+[![Build Status](https://travis-ci.org/doudou/autorespawn.svg?branch=master)](https://travis-ci.org/doudou/autorespawn)
+[![Gem Version](https://badge.fury.io/rb/autorespawn.svg)](http://badge.fury.io/rb/autorespawn)
+
 Autorespawn is an implementation of the popular autoreload scheme, which reloads
 Ruby program files when they change, but instead execs/spawns the underlying
 program again. This avoids common issues related to the load mechanism.

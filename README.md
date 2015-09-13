@@ -2,6 +2,8 @@
 
 [![Build Status](https://travis-ci.org/doudou/autorespawn.svg?branch=master)](https://travis-ci.org/doudou/autorespawn)
 [![Gem Version](https://badge.fury.io/rb/autorespawn.svg)](http://badge.fury.io/rb/autorespawn)
+[![Coverage Status](https://coveralls.io/repos/doudou/autorespawn/badge.svg?branch=master&service=github)](https://coveralls.io/github/doudou/autorespawn?branch=master)
+[![Documentation](http://b.repl.ca/v1/yard-docs-blue.png)](http://rubydoc.info/gems/autorespawn/frames)
 
 Autorespawn is an implementation of the popular autoreload scheme, which reloads
 Ruby program files when they change, but instead execs/spawns the underlying

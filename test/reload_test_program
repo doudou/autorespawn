@@ -1,8 +1,10 @@
 #! /usr/bin/env ruby
 
+name = ENV['TEST_NAME']
 level = Integer(ENV['TEST_LEVEL'] ||= '0')
 level += 1
 ENV['TEST_LEVEL'] = level.to_s
+STDOUT.sync = true
 
 begin
     require 'simplecov'
@@ -12,7 +14,7 @@ begin
         Coveralls::SimpleCov::Formatter
     ]
     SimpleCov.start do
-        command_name "reload_test_program-#{level}"
+        command_name "#{name}-#{level}"
         add_filter "/test/"
     end
 rescue LoadError
@@ -20,9 +22,11 @@ end
 
 
 require 'autorespawn'
-require ENV['TEST_REQUIRE']
-
-Autorespawn::Watch.autoreload Gem.ruby, $0 do
+spawner = Autorespawn.new
+spawner.requires do
+    require ENV['TEST_REQUIRE']
+end
+spawner.run do
     STDOUT.puts Process.pid
     STDOUT.flush
 end

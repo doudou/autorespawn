@@ -2,7 +2,7 @@ require 'test_helper'
 require 'autorespawn/program_id'
 require 'fakefs/safe'
 
-module Autorespawn
+class Autorespawn
     describe ProgramID do
         subject { ProgramID.new }
 

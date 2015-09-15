@@ -2,7 +2,7 @@ require 'autorespawn/program_id'
 require 'pathname'
 require 'digest/sha1'
 
-module Autorespawn
+class Autorespawn
     # Management of the ID of a complete Ruby program
     #
     # It basically stores information about all the files that form this
@@ -55,6 +55,13 @@ module Autorespawn
             info
         end
 
+        # Enumerate the path of all the files that are being tracked
+        #
+        # @yieldparam [Pathname] path
+        def each_tracked_file(&block)
+            files.keys.each(&block)
+        end
+
         # Returns a string that can ID this program
         def id
             return @id if @id
@@ -76,6 +83,10 @@ module Autorespawn
                 end
             end
             false
+        end
+
+        def include?(path, search_path = ruby_load_path)
+            files.has_key?(resolve_file_path(path, search_path))
         end
 
         # @api private

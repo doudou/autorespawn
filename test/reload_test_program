@@ -23,10 +23,9 @@ end
 
 require 'autorespawn'
 spawner = Autorespawn.new
-spawner.requires do
-    require ENV['TEST_REQUIRE']
-end
+spawner.require ENV['TEST_REQUIRE']
 spawner.run do
+    require ENV['TEST_REQUIRE']
     STDOUT.puts Process.pid
     STDOUT.flush
 end

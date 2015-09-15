@@ -50,12 +50,15 @@ class Autorespawn
 
     INITIAL_STATE_ENV_NAME = "AUTORESPAWN_AUTORELOAD"
 
-    def initialize
+    def initialize(track_current: false)
         @respawn_handlers = Array.new
         @program_id = ProgramID.new
         @exceptions = Array.new
         @required_paths = Set.new
         @error_paths = Set.new
+        if track_current
+            @required_paths = currently_loaded_files.to_set
+        end
     end
 
     # Returns true if there is an initial state dump
@@ -68,20 +71,22 @@ class Autorespawn
         @program_id = Marshal.load(STDIN)
     end
 
-    # Require one file under the Autorespawn supervision
+    # Requires one file under the autorespawn supervision
+    #
+    # If the require fails, the call to {.run} will not execute its block,
+    # instead waiting for the file(s) to change
     def require(file)
-        requires do
-            Kernel.require file
-        end
+        watch_yield { Kernel.require file }
     end
 
     # Call to require a bunch of files in a block and add the result to the list of watches
-    def requires
+    def watch_yield
         current = currently_loaded_files
+        new_exceptions = Array.new
         begin
-            yield
-            []
+            result = yield
         rescue Exception => e
+            new_exceptions << e
             exceptions << e
             backtrace = e.backtrace_locations.map { |l| Pathname.new(l.absolute_path) }
             error_paths.merge(backtrace)
@@ -90,6 +95,7 @@ class Autorespawn
             end
         end
         required_paths.merge(currently_loaded_files - current)
+        return result, new_exceptions
     end
 
     # Create a pipe and dump the program ID state of the current program
@@ -130,7 +136,7 @@ class Autorespawn
     # stop
     #
     # This method does NOT return
-    def run(*command, **options)
+    def run(*command, **options, &block)
         if has_initial_state?
             load_initial_state
         end
@@ -141,27 +147,40 @@ class Autorespawn
 
         if not_tracked.empty? && !program_id.changed?
             if exceptions.empty?
-                # We can do what is required of us and wait for changes
-                begin yield
-                rescue Exception => e
+                did_yield = true
+                _, yield_exceptions = watch_yield(&block)
+                yield_exceptions.each do |e|
                     backtrace = (e.backtrace || Array.new).dup
                     first_line = backtrace.shift
                     STDERR.puts "#{e.message}: #{first_line}"
                     STDERR.puts "  #{e.backtrace.join("\n  ")}"
                 end
-            else
-                STDERR.puts "#{exceptions.size} errors while loading, waiting for changes"
+
             end
-            Watch.new(program_id).wait
-            respawn_handlers.each { |b| b.call }
+
+            all_files = required_paths | error_paths
+            not_tracked = all_files.
+                find_all { |p| !program_id.include?(p) }
+
+            if not_tracked.empty?
+                Watch.new(program_id).wait
+            end
+            if did_yield
+                respawn_handlers.each { |b| b.call }
+            end
         end
 
+        all_files.merge(currently_loaded_files)
         r, w = dump_initial_state(all_files)
         if command.empty?
             command = [$0, *ARGV]
         end
         exec(Hash[INITIAL_STATE_ENV_NAME => '1'], *command,
              in: r, **options)
+    end
+
+    def self.run(*command, **options, &block)
+        new.run(*command, **options, &block)
     end
 end
 

@@ -9,6 +9,8 @@ Gem::Specification.new do |spec|
   spec.authors       = ["Sylvain Joyeux"]
   spec.email         = ["sylvain.joyeux@m4x.org"]
 
+  spec.required_ruby_version = ">= 2.1.0"
+
   spec.summary       = "functionality to respawn a Ruby program when its source changes"
   spec.description   =<<-EOD
 This gem implements the functionality to take a signature of the current Ruby

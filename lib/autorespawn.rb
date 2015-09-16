@@ -143,7 +143,11 @@ class Autorespawn
 
         all_files = required_paths | error_paths
         not_tracked = all_files.
-            find_all { |p| !program_id.include?(p) }
+            find_all do |p|
+                begin !program_id.include?(p)
+                rescue FileNotFound
+                end
+            end
 
         if not_tracked.empty? && !program_id.changed?
             if exceptions.empty?
@@ -160,7 +164,11 @@ class Autorespawn
 
             all_files = required_paths | error_paths
             not_tracked = all_files.
-                find_all { |p| !program_id.include?(p) }
+                find_all do |p|
+                    begin !program_id.include?(p)
+                    rescue FileNotFound
+                    end
+                end
 
             if not_tracked.empty?
                 Watch.new(program_id).wait

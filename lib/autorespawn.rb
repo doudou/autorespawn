@@ -108,11 +108,11 @@ class Autorespawn
             rescue FileNotFound
             end
         end
-        r, w = IO.pipe
-        s = Marshal.dump(program_id)
-        w.write s
-        w.flush
-        return r, w
+        io = Tempfile.new "autorespawn_initial_state"
+        Marshal.dump(program_id, io)
+        io.flush
+        io.rewind
+        return io
     end
 
     def currently_loaded_files
@@ -179,12 +179,12 @@ class Autorespawn
         end
 
         all_files.merge(currently_loaded_files)
-        r, w = dump_initial_state(all_files)
+        io = dump_initial_state(all_files)
         if command.empty?
             command = [$0, *ARGV]
         end
         exec(Hash[INITIAL_STATE_ENV_NAME => '1'], *command,
-             in: r, **options)
+             in: io, **options)
     end
 
     def self.run(*command, **options, &block)

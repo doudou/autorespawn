@@ -22,6 +22,17 @@ require "autorespawn/watch"
 #   passed as-is to Kernel.spawn and Kernel.exec
 # @param options keyword options to pass to Kernel.spawn and Kernel.exec
 class Autorespawn
+    INITIAL_STATE_FD = "AUTORESPAWN_AUTORELOAD"
+
+    class << self
+        attr_reader :initial_state_fd
+    end
+    @initial_state_fd =
+        if fd = ENV[INITIAL_STATE_FD]
+            Integer(fd)
+        end
+    ENV.delete(INITIAL_STATE_FD)
+
     # Set of callbacks called just before we respawn the process
     #
     # @return [Array<#call>]
@@ -48,8 +59,6 @@ class Autorespawn
     # @return [Set<Pathname>]
     attr_reader :error_paths
 
-    INITIAL_STATE_ENV_NAME = "AUTORESPAWN_AUTORELOAD"
-
     def initialize(track_current: false)
         @respawn_handlers = Array.new
         @program_id = ProgramID.new
@@ -63,12 +72,16 @@ class Autorespawn
 
     # Returns true if there is an initial state dump
     def has_initial_state?
-        !!ENV[INITIAL_STATE_ENV_NAME]
+        !!Autorespawn.initial_state_fd
     end
 
     # Loads the initial state from STDIN
     def load_initial_state
-        @program_id = Marshal.load(STDIN)
+        io = IO.for_fd(Autorespawn.initial_state_fd)
+        @program_id = Marshal.load(io)
+        tmpname = Marshal.load(io)
+        io.close
+        File.unlink(tmpname)
     end
 
     # Requires one file under the autorespawn supervision
@@ -183,8 +196,8 @@ class Autorespawn
         if command.empty?
             command = [$0, *ARGV]
         end
-        exec(Hash[INITIAL_STATE_ENV_NAME => '1'], *command,
-             in: io, **options)
+        exec(Hash[INITIAL_STATE_FD => "#{io.fileno}"], *command,
+             io => io, **options)
     end
 
     def self.run(*command, **options, &block)

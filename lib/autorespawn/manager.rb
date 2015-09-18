@@ -56,7 +56,7 @@ class Autorespawn
             while active_slaves.size < parallel_level
                 if slave_i = workers.index { |s| s.needs_spawn? }
                     slave = workers.delete_at(slave_i)
-                    @workers = workers[slave_i..-1] + workers[0..slave_i-1] + [slave]
+                    @workers = workers[slave_i..-1] + workers[0, slave_i] + [slave]
                     slave.spawn
                     new_slaves << slave
                     active_slaves[slave.pid] = slave

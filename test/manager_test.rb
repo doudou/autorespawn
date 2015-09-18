@@ -37,6 +37,26 @@ class Autorespawn
                 assert_equal [[slave], Array.new], subject.poll
             end
 
+            it "reorders the workers array properly even if the active slave is the last one" do
+                slaves = [subject.add_slave('cmd'), subject.add_slave('cmd')]
+                flexmock(slaves[1]).should_receive(:needs_spawn?).and_return(true)
+                flexmock(slaves[1]).should_receive(:spawn).once
+                flexmock(slaves[0]).should_receive(:needs_spawn?).and_return(false)
+
+                subject.poll
+                assert_equal slaves, subject.workers
+            end
+
+            it "reorders the workers array properly even if the active slave is the first one" do
+                slaves = [subject.add_slave('cmd'), subject.add_slave('cmd')]
+                flexmock(slaves[0]).should_receive(:needs_spawn?).and_return(true)
+                flexmock(slaves[0]).should_receive(:spawn).once
+                flexmock(slaves[1]).should_receive(:needs_spawn?).and_return(false)
+
+                subject.poll
+                assert_equal slaves.reverse, subject.workers
+            end
+
             it "reorders the workers array to put the slaves before the executed one at the end" do
                 slaves = (0..9).map do |i|
                     slave = subject.add_slave('cmd')

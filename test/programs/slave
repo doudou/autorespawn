@@ -1,0 +1,56 @@
+#! /usr/bin/env ruby
+
+name = ENV['TEST_NAME']
+level = Integer(ENV['TEST_LEVEL'] ||= '0')
+level += 1
+ENV['TEST_LEVEL'] = level.to_s
+STDOUT.sync = true
+
+begin
+    require 'simplecov'
+    require 'coveralls'
+    SimpleCov.formatter = SimpleCov::Formatter::MultiFormatter[
+        SimpleCov::Formatter::HTMLFormatter,
+        Coveralls::SimpleCov::Formatter
+    ]
+    SimpleCov.start do
+        command_name "#{name}-#{level}"
+        add_filter "/test/"
+    end
+rescue LoadError
+end
+
+require 'autorespawn'
+require 'optparse'
+
+exit_code = 0
+requires = Array.new
+subcommands = Array.new
+parser = OptionParser.new do |opt|
+    opt.on '--exit=CODE', Integer do |code|
+        exit_code = code
+    end
+    opt.on '--terminate=CODE', Integer do |code|
+        exit code
+    end
+    opt.on '--require=PATH', String do |path|
+        requires << path
+    end
+    opt.on '--subcommand=STRING', String do |cmd|
+        subcommands << cmd
+    end
+end
+parser.parse(ARGV)
+
+# Empty program ... should never respawn
+spawner = Autorespawn.new
+spawner.exit_code(exit_code)
+subcommands.each do |cmd|
+    spawner.master_request_subcommand(cmd)
+end
+requires.each do |path|
+    spawner.require path
+end
+spawner.run do
+end
+

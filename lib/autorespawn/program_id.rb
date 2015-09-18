@@ -26,6 +26,16 @@ class Autorespawn
             id
         end
 
+        # Whether this program ID tracks some files
+        def empty?
+            files.empty?
+        end
+
+        # Remove all tracked files
+        def clear
+            files.clear
+        end
+
         # Registers the file information for all loaded features
         # 
         # @return [void]
@@ -44,15 +54,48 @@ class Autorespawn
             end
         end
 
+        # Register a set of files
+        #
+        # @param [Array<String>] files the list of files
+        # @param [Array<String>] search_path the path to resolve relative paths
+        # @param [Boolean] ignore_not_found whether files that cannot be
+        #   resolved are ignored or cause a FileNotFound exception
+        # @return [Boolean] whether the program ID has been modified
+        def register_files(files, search_path = ruby_load_path, ignore_not_found: true)
+            modified = false
+            files.each do |path|
+                begin modified = register_file(path, search_path) || modified
+                rescue FileNotFound
+                    raise if !ignore_not_found
+                end
+            end
+            modified
+        end
+
         # Registers file information for one file
         #
         # @param [Pathname] file the path to the file
-        # @return [FileInfo] the file's information
+        # @return [Boolean] whether the registration modified the program ID's
+        #   state
         def register_file(file, search_path = ruby_load_path)
             info = file_info(file, search_path)
+            modified = (files[info.path] != info)
             files[info.path] = info
+            @id = nil if modified
+            modified
+        end
+
+        # Update the information about all the files registered on this object
+        def refresh
+            updated = Hash.new
+            files.each_key do |info|
+                next if !info.path.exist?
+                info = file_info(info.path)
+                updated[info.path] = info
+            end
+            @files = updated
             @id = nil
-            info
+            updated
         end
 
         # Enumerate the path of all the files that are being tracked

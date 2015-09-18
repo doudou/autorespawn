@@ -1,7 +1,10 @@
+require 'set'
 require "autorespawn/version"
 require "autorespawn/exceptions"
 require "autorespawn/program_id"
 require "autorespawn/watch"
+require "autorespawn/slave"
+require "autorespawn/manager"
 
 # Automatically exec's the current program when one of the source file changes
 #
@@ -24,14 +27,26 @@ require "autorespawn/watch"
 class Autorespawn
     INITIAL_STATE_FD = "AUTORESPAWN_AUTORELOAD"
 
-    class << self
-        attr_reader :initial_state_fd
+    SLAVE_RESULT_ENV = 'AUTORESPAWN_SLAVE_RESULT_FD'
+    SLAVE_INITIAL_STATE_ENV = 'AUTORESPAWN_SLAVE_INITIAL_STATE_FD'
+
+    def self.slave_result_fd
+        @slave_result_fd
     end
-    @initial_state_fd =
-        if fd = ENV[INITIAL_STATE_FD]
-            Integer(fd)
-        end
-    ENV.delete(INITIAL_STATE_FD)
+    def self.slave_initial_state_fd
+        @slave_initial_state_fd
+    end
+
+    # Delete the envvars first, we really don't want them to leak
+    slave_initial_state_fd = ENV.delete(SLAVE_INITIAL_STATE_ENV)
+    slave_result_fd = ENV.delete(SLAVE_RESULT_ENV)
+
+    if slave_initial_state_fd
+        @slave_initial_state_fd = Integer(slave_initial_state_fd)
+    end
+    if slave_result_fd
+        @slave_result_fd = Integer(slave_result_fd)
+    end
 
     # Set of callbacks called just before we respawn the process
     #
@@ -59,12 +74,16 @@ class Autorespawn
     # @return [Set<Pathname>]
     attr_reader :error_paths
 
+    # In master/slave mode, the list of subcommands that the master should spawn
+    attr_reader :subcommands
+
     def initialize(track_current: false)
         @respawn_handlers = Array.new
         @program_id = ProgramID.new
         @exceptions = Array.new
         @required_paths = Set.new
         @error_paths = Set.new
+        @subcommands = Array.new
         if track_current
             @required_paths = currently_loaded_files.to_set
         end
@@ -72,16 +91,14 @@ class Autorespawn
 
     # Returns true if there is an initial state dump
     def has_initial_state?
-        !!Autorespawn.initial_state_fd
+        !!Autorespawn.slave_initial_state_fd
     end
 
     # Loads the initial state from STDIN
     def load_initial_state
-        io = IO.for_fd(Autorespawn.initial_state_fd)
+        io = IO.for_fd(Autorespawn.slave_initial_state_fd)
         @program_id = Marshal.load(io)
-        tmpname = Marshal.load(io)
         io.close
-        File.unlink(tmpname)
     end
 
     # Requires one file under the autorespawn supervision
@@ -98,6 +115,8 @@ class Autorespawn
         new_exceptions = Array.new
         begin
             result = yield
+        rescue Interrupt, SystemExit
+            raise
         rescue Exception => e
             new_exceptions << e
             exceptions << e
@@ -111,21 +130,32 @@ class Autorespawn
         return result, new_exceptions
     end
 
+    # Returns whether we have been spawned by a manager, or in standalone mode
+    def slave?
+        self.class.slave_result_fd
+    end
+
+    # Request that the master spawns these subcommands
+    #
+    # @raise [NotSlave] if the script is being executed in standalone mode
+    def master_request_subcommand(*cmdline, **spawn_options)
+        if !slave?
+            raise NotSlave, "cannot call #master_request_subcommand in standalone mode"
+        end
+        subcommands << [cmdline, spawn_options]
+    end
+
     # Create a pipe and dump the program ID state of the current program
     # there
     def dump_initial_state(files)
         program_id = ProgramID.new
-        files.each do |file|
-            begin
-                program_id.register_file(file)
-            rescue FileNotFound
-            end
-        end
+        program_id.register_files(files)
+
         io = Tempfile.new "autorespawn_initial_state"
         Marshal.dump(program_id, io)
         io.flush
         io.rewind
-        return io
+        io
     end
 
     def currently_loaded_files
@@ -139,6 +169,15 @@ class Autorespawn
         respawn_handlers << block
     end
 
+    # Defines the exit code for this instance
+    def exit_code(value = nil)
+        if value
+            @exit_code = value
+        else
+            @exit_code
+        end
+    end
+
     # Perform the program workd and reexec it when needed
     #
     # It is the last method you should be calling in your program, providing the
@@ -149,7 +188,7 @@ class Autorespawn
     # stop
     #
     # This method does NOT return
-    def run(*command, **options, &block)
+    def run(*command, **spawn_options, &block)
         if has_initial_state?
             load_initial_state
         end
@@ -183,7 +222,7 @@ class Autorespawn
                     end
                 end
 
-            if not_tracked.empty?
+            if !slave? && not_tracked.empty?
                 Watch.new(program_id).wait
             end
             if did_yield
@@ -191,13 +230,20 @@ class Autorespawn
             end
         end
 
-        all_files.merge(currently_loaded_files)
-        io = dump_initial_state(all_files)
-        if command.empty?
-            command = [$0, *ARGV]
+        if slave?
+            io = IO.for_fd(Autorespawn.slave_result_fd)
+            string = Marshal.dump([subcommands, all_files])
+            io.write string
+            io.flush
+            exit exit_code
+        else
+            io = dump_initial_state(all_files)
+            if command.empty?
+                command = [$0, *ARGV]
+            end
+            Kernel.exec(Hash[SLAVE_INITIAL_STATE_ENV => "#{io.fileno}"], *command,
+                        io.fileno => io.fileno, **spawn_options)
         end
-        exec(Hash[INITIAL_STATE_FD => "#{io.fileno}"], *command,
-             io => io, **options)
     end
 
     def self.run(*command, **options, &block)

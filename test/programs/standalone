@@ -22,10 +22,27 @@ end
 
 
 require 'autorespawn'
+require 'optparse'
+
+exit_level = nil
+parser = OptionParser.new do |opt|
+    opt.on '--exit-level=LEVEL', Integer do |l|
+        exit_level = l
+    end
+end
+parser.parse(ARGV)
+
 spawner = Autorespawn.new
 spawner.require ENV['TEST_REQUIRE']
+
+# The throw/catch here is a trick to make sure we get the code coverage output
+# at the end of the program. Otherwise, using e.g. exit or interrupt we don't
+spawner.at_respawn { SimpleCov.result.format! }
 spawner.run do
-    require ENV['TEST_REQUIRE']
     STDOUT.puts Process.pid
     STDOUT.flush
+    if exit_level && exit_level == level
+        SimpleCov.result.format!
+        exit 0
+    end
 end

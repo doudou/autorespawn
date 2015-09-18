@@ -36,6 +36,9 @@ class Autorespawn
     def self.slave_initial_state_fd
         @slave_initial_state_fd
     end
+    def self.slave?
+        !!slave_result_fd
+    end
 
     # Delete the envvars first, we really don't want them to leak
     slave_initial_state_fd = ENV.delete(SLAVE_INITIAL_STATE_ENV)
@@ -47,6 +50,13 @@ class Autorespawn
     if slave_result_fd
         @slave_result_fd = Integer(slave_result_fd)
     end
+
+    # The arguments that should be passed to Kernel.exec in standalone mode
+    #
+    # Ignored in slave mode
+    #
+    # @return [(Array,Hash)]
+    attr_reader :process_command_line
 
     # Set of callbacks called just before we respawn the process
     #
@@ -77,7 +87,11 @@ class Autorespawn
     # In master/slave mode, the list of subcommands that the master should spawn
     attr_reader :subcommands
 
-    def initialize(track_current: false)
+    def initialize(*command, track_current: false, **options)
+        if command.empty?
+            command = [$0, *ARGV]
+        end
+        @process_command_line = [command, options]
         @respawn_handlers = Array.new
         @program_id = ProgramID.new
         @exceptions = Array.new
@@ -132,16 +146,13 @@ class Autorespawn
 
     # Returns whether we have been spawned by a manager, or in standalone mode
     def slave?
-        self.class.slave_result_fd
+        self.class.slave?
     end
 
     # Request that the master spawns these subcommands
     #
     # @raise [NotSlave] if the script is being executed in standalone mode
-    def master_request_subcommand(*cmdline, **spawn_options)
-        if !slave?
-            raise NotSlave, "cannot call #master_request_subcommand in standalone mode"
-        end
+    def add_slave(*cmdline, **spawn_options)
         subcommands << [cmdline, spawn_options]
     end
 
@@ -188,12 +199,42 @@ class Autorespawn
     # stop
     #
     # This method does NOT return
-    def run(*command, **spawn_options, &block)
+    def run(&block)
+        if slave? || subcommands.empty?
+            all_files = required_paths | error_paths
+            if block_given? 
+                all_files = perform_work(all_files, &block)
+            end
+
+            if slave?
+                io = IO.for_fd(Autorespawn.slave_result_fd)
+                string = Marshal.dump([subcommands, all_files])
+                io.write string
+                io.flush
+                exit exit_code
+            else
+                io = dump_initial_state(all_files)
+                Kernel.exec(Hash[SLAVE_INITIAL_STATE_ENV => "#{io.fileno}"], *process_command_line[0],
+                            io.fileno => io.fileno, **process_command_line[1])
+            end
+        else
+            if block_given?
+                raise ArgumentError, "cannot call #run with a block after using #add_slave"
+            end
+            manager = Manager.new
+            subcommands.each do |*args|
+                manager.add_slave(*args)
+            end
+            return manager.run
+        end
+    end
+
+    # @api private
+    def perform_work(all_files, &block)
         if has_initial_state?
             load_initial_state
         end
 
-        all_files = required_paths | error_paths
         not_tracked = all_files.
             find_all do |p|
                 begin !program_id.include?(p)
@@ -229,25 +270,11 @@ class Autorespawn
                 respawn_handlers.each { |b| b.call }
             end
         end
-
-        if slave?
-            io = IO.for_fd(Autorespawn.slave_result_fd)
-            string = Marshal.dump([subcommands, all_files])
-            io.write string
-            io.flush
-            exit exit_code
-        else
-            io = dump_initial_state(all_files)
-            if command.empty?
-                command = [$0, *ARGV]
-            end
-            Kernel.exec(Hash[SLAVE_INITIAL_STATE_ENV => "#{io.fileno}"], *command,
-                        io.fileno => io.fileno, **spawn_options)
-        end
+        all_files
     end
 
     def self.run(*command, **options, &block)
-        new.run(*command, **options, &block)
+        new(*command, **options).run(&block)
     end
 end
 

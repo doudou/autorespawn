@@ -46,11 +46,10 @@ parser.parse(ARGV)
 spawner = Autorespawn.new
 spawner.exit_code(exit_code)
 subcommands.each do |cmd|
-    spawner.master_request_subcommand(cmd)
+    spawner.add_slave(cmd)
 end
 requires.each do |path|
     spawner.require path
 end
-spawner.run do
-end
+spawner.run
 

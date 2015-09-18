@@ -42,6 +42,13 @@ class Autorespawn
             Array.new
         end
 
+        def run
+            while true
+                poll
+                sleep 1
+            end
+        end
+
         # Wait for children to terminate and spawns them when needed
         def poll
             finished_slaves = collect_finished_slaves

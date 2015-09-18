@@ -37,6 +37,10 @@ class Autorespawn
                 assert_equal [[slave], Array.new], subject.poll
             end
 
+            it "returns even if there is not enough slaves to fill all the available slots" do
+                subject.poll
+            end
+
             it "reorders the workers array properly even if the active slave is the last one" do
                 slaves = [subject.add_slave('cmd'), subject.add_slave('cmd')]
                 flexmock(slaves[1]).should_receive(:needs_spawn?).and_return(true)

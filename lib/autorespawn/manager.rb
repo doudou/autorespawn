@@ -66,6 +66,8 @@ class Autorespawn
                     slave.spawn
                     new_slaves << slave
                     active_slaves[slave.pid] = slave
+                else
+                    break
                 end
             end
             return new_slaves, finished_slaves

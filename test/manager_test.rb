@@ -20,6 +20,14 @@ class Autorespawn
                 flexmock(slave).should_receive(:finished).once.with(status)
                 assert_equal [slave], subject.collect_finished_slaves
             end
+
+            it "removes the terminated slave from the active_slaves list" do
+                slave = start_slave 'cmd', pid: 20
+                flexmock(Process).should_receive(:waitpid2).and_return([20, status = flexmock], nil)
+                flexmock(slave).should_receive(:finished).once.with(status)
+                subject.collect_finished_slaves
+                assert subject.active_slaves.empty?
+            end
         end
 
         describe '#poll' do

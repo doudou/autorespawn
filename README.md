@@ -9,12 +9,12 @@ Autorespawn is an implementation of the popular autoreload scheme, which reloads
 Ruby program files when they change, but instead execs/spawns the underlying
 program again. This avoids common issues related to the load mechanism.
 
-## Usage
+## Standalone Usage
 
 Require all the files you need autorespawn to watch and then do
 
 ~~~
-Autorespawn.autorespawn do
+Autorespawn.run do
    # Add the program's functionality here
 end
 ~~~
@@ -23,9 +23,44 @@ If you touch ARGV and $0, you will want to pass the program and arguments
 explicitely
 
 ~~~
-Autorespawn.autorespawn 'program', 'argument0', 'argument1' do
+Autorespawn.run 'program', 'argument0', 'argument1' do
 end
 ~~~
+
+## Master/slave mode
+
+The main usage I designed this gem for was to implement an autotest scheme that
+does not use #load, and that does restart tests whose dependencies are changed
+(autotest only looks for the test files). That means a few 100 subcommands that
+need to be spawned and managed. Not really feasible without some kind of manager
+behind the scene.
+
+Autorespawn can be started used in master/slave mode. Some processes would be
+spawning new subcommands by registering them with the `Autorespawn#add_slave` method, while
+other are workers. In my autotest prototype, the same script is called in both
+cases, only the codepaths are different:
+
+~~~ ruby
+manager = Autorespawn.new
+if build_axis.empty? == 1
+    manager.run do
+        # Perform the work
+    end
+else
+    build_axis.each do |cmdline|
+        manager.add_slave(*cmdline)
+    end
+    manager.run
+end
+~~~
+
+It is safe to use this scheme recursively. Slaves who call `#add_slave` will
+simply pass the request to the master.
+
+## TODO
+
+Manage the dependency between slaves that called `add_slave` and these slaves,
+i.e. auto-remove the level 2 slaves when the level 1 changes and is respawned.
 
 ## Installation
 

@@ -94,9 +94,9 @@ class Autorespawn
         # Update the information about all the files registered on this object
         def refresh
             updated = Hash.new
-            files.each_key do |info|
-                next if !info.path.exist?
-                info = file_info(info.path)
+            files.each_key do |path|
+                next if !path.exist?
+                info = file_info(path)
                 updated[info.path] = info
             end
             @files = updated

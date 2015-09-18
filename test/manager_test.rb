@@ -78,5 +78,18 @@ class Autorespawn
                 assert_equal (after + before + [slave]), subject.workers
             end
         end
+
+        describe "#run" do
+            it "kills active workers on exception" do
+                slave = subject.add_slave('cmd')
+                flexmock(slave).should_receive(:spawn).once.ordered
+                subject.poll
+                flexmock(slave).should_receive(:kill).once.ordered
+                flexmock(subject).should_receive(:poll).and_raise(RuntimeError)
+                assert_raises(RuntimeError) do
+                    subject.run
+                end
+            end
+        end
     end
 end

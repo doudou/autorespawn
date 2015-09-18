@@ -47,6 +47,12 @@ class Autorespawn
                 poll
                 sleep 1
             end
+
+        rescue Interrupt
+        ensure
+            active_slaves.values.each do |slave|
+                slave.kill
+            end
         end
 
         # Wait for children to terminate and spawns them when needed

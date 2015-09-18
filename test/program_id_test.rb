@@ -141,6 +141,59 @@ class Autorespawn
             end
         end
 
+        describe "#register_file" do
+            attr_reader :dir, :path
+            before do
+                @dir = Pathname('/path/to')
+                dir.mkpath
+                @path = Pathname('/path/to/file1')
+                FileUtils.touch(path)
+            end
+
+            it "returns the full path to the file if it was not registered" do
+                assert_equal path, subject.register_file(Pathname('file1'), [dir])
+            end
+
+            it "returns the full path to the file if it has changed" do
+                subject.register_file(Pathname('file1'), [dir])
+                FileUtils.touch(path)
+                assert_equal path, subject.register_file(Pathname('file1'), [dir])
+            end
+            
+            it "returns nil if a file was already registered and did not change" do
+                subject.register_file(Pathname('file1'), [dir])
+                assert_nil subject.register_file(Pathname('file1'), [dir])
+            end
+        end
+
+        describe "#register_files" do
+            attr_reader :dir, :paths
+            before do
+                @dir = Pathname('/path/to')
+                dir.mkpath
+                @paths = Array.new
+                paths << Pathname('/path/to/file1')
+                paths << Pathname('/path/to/file2')
+                paths.each { |p| FileUtils.touch(p) }
+            end
+            it "registers all the provided filed" do
+                subject.register_files([Pathname('file1'), Pathname('file2')], [dir])
+                paths.each do |p|
+                    assert subject.include?(p)
+                end
+            end
+            it "returns the list of full paths for those that got newly registered" do
+                assert_equal paths,
+                    subject.register_files([Pathname('file1'), Pathname('file2')], [dir])
+            end
+            it "returns the list of full paths for those that changed" do
+                subject.register_files([Pathname('file1'), Pathname('file2')], [dir])
+                FileUtils.touch(paths[0])
+                assert_equal [paths[0]],
+                    subject.register_files([Pathname('file1'), Pathname('file2')], [dir])
+            end
+        end
+
         describe "#changed?" do
             before do
                 FileUtils.mkdir_p '/path/to'

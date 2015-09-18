@@ -154,8 +154,12 @@ class Autorespawn
                 file_list = Array.new
                 @success = false
             end
-            @needs_spawn = program_id.register_files(file_list) || @needs_spawn
+            modified = program_id.register_files(file_list)
+            if !modified.empty?
+                @needs_spawn = true
+            end
             result_r.close
+            modified
         end
 
         # @api private

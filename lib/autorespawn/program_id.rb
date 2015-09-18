@@ -62,9 +62,12 @@ class Autorespawn
         #   resolved are ignored or cause a FileNotFound exception
         # @return [Boolean] whether the program ID has been modified
         def register_files(files, search_path = ruby_load_path, ignore_not_found: true)
-            modified = false
+            modified = Array.new
             files.each do |path|
-                begin modified = register_file(path, search_path) || modified
+                begin
+                    if full_path = register_file(path, search_path)
+                        modified << full_path
+                    end
                 rescue FileNotFound
                     raise if !ignore_not_found
                 end
@@ -81,8 +84,11 @@ class Autorespawn
             info = file_info(file, search_path)
             modified = (files[info.path] != info)
             files[info.path] = info
-            @id = nil if modified
-            modified
+
+            if modified
+                @id = nil 
+                info.path
+            end
         end
 
         # Update the information about all the files registered on this object

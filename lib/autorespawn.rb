@@ -98,6 +98,7 @@ class Autorespawn
         @required_paths = Set.new
         @error_paths = Set.new
         @subcommands = Array.new
+        @exit_code = 0
         if track_current
             @required_paths = currently_loaded_files.to_set
         end

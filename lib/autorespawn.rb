@@ -222,8 +222,8 @@ class Autorespawn
                 raise ArgumentError, "cannot call #run with a block after using #add_slave"
             end
             manager = Manager.new
-            subcommands.each do |*args|
-                manager.add_slave(*args)
+            subcommands.each do |command, options|
+                manager.add_slave(*command, **options)
             end
             return manager.run
         end

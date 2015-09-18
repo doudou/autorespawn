@@ -2,11 +2,27 @@ require 'test_helper'
 require 'autorespawn/program_id'
 
 describe Autorespawn do
-    describe '#autorespawn' do
+    describe '#run' do
         after do
             if @pid
                 Process.waitpid2 @pid
             end
+        end
+
+        it "passes slave definitions to a manager" do
+            spawner = Autorespawn.new
+            spawner.add_slave 'cmd', priority: 10
+
+            manager = flexmock(Autorespawn::Manager).new_instances
+            manager.should_receive(:add_slave).with('cmd', priority: 10).once
+            manager.should_receive(:run).once.and_return(ret = flexmock)
+            assert_equal ret, spawner.run
+        end
+
+        it "raises if using both #add_slave and a block" do
+            spawner = Autorespawn.new
+            spawner.add_slave 'cmd', priority: 10
+            assert_raises(ArgumentError) { spawner.run { } }
         end
 
         it "executes the block once" do

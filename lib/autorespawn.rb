@@ -77,6 +77,11 @@ class Autorespawn
     # @return [(Array,Hash)]
     attr_reader :process_command_line
 
+    # Set of callbacks called when an exception is caught
+    #
+    # @return [Array<#call>]
+    attr_reader :exception_callbacks
+
     # Set of callbacks called just before we respawn the process
     #
     # @return [Array<#call>]
@@ -115,6 +120,7 @@ class Autorespawn
             ProgramID.new
 
         @process_command_line = [command, options]
+        @exception_callbacks = Array.new
         @respawn_handlers = Array.new
         @exceptions = Array.new
         @required_paths = Set.new
@@ -144,6 +150,7 @@ class Autorespawn
             raise
         rescue Exception => e
             new_exceptions << e
+            exception_callbacks.each { |block| block.call(e) }
             exceptions << e
             backtrace = e.backtrace_locations.map { |l| Pathname.new(l.absolute_path) }
             error_paths.merge(backtrace)
@@ -183,6 +190,10 @@ class Autorespawn
     def currently_loaded_files
         $LOADED_FEATURES.map { |p| Pathname.new(p) } +
             caller_locations.map { |l| Pathname.new(l.absolute_path) }
+    end
+
+    def on_exception(&block)
+        exception_callbacks << block
     end
         
     # Declares a handler that should be called in a process, just before

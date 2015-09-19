@@ -215,8 +215,12 @@ class Autorespawn
                 exit exit_code
             else
                 io = dump_initial_state(all_files)
-                Kernel.exec(Hash[SLAVE_INITIAL_STATE_ENV => "#{io.fileno}"], *process_command_line[0],
-                            io.fileno => io.fileno, **process_command_line[1])
+                cmdline  = process_command_line[0].dup
+                redirect = Hash[io.fileno => io.fileno].merge(process_command_line[1])
+                if cmdline.last.kind_of?(Hash)
+                    redirect = redirect.merge(cmdline.pop)
+                end
+                Kernel.exec(Hash[SLAVE_INITIAL_STATE_ENV => "#{io.fileno}"], *cmdline, redirect)
             end
         else
             if block_given?

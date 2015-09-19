@@ -2,9 +2,10 @@
 
 name = ENV['TEST_NAME']
 level = Integer(ENV['TEST_LEVEL'] ||= '0')
+RESULT_IO = IO.for_fd(Integer(ENV['TEST_RESULT_IO']))
+RESULT_IO.sync = true
 level += 1
 ENV['TEST_LEVEL'] = level.to_s
-STDOUT.sync = true
 
 begin
     require 'simplecov'
@@ -32,17 +33,17 @@ parser = OptionParser.new do |opt|
 end
 parser.parse(ARGV)
 
-spawner = Autorespawn.new
+spawner = Autorespawn.new($0, *ARGV, RESULT_IO => RESULT_IO)
 spawner.require ENV['TEST_REQUIRE']
 
 # The throw/catch here is a trick to make sure we get the code coverage output
 # at the end of the program. Otherwise, using e.g. exit or interrupt we don't
 spawner.at_respawn { SimpleCov.result.format! }
 spawner.run do
-    STDOUT.puts Process.pid
-    STDOUT.flush
+    RESULT_IO.puts Process.pid
     if exit_level && exit_level == level
         SimpleCov.result.format!
         exit 0
     end
 end
+

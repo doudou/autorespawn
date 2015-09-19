@@ -33,7 +33,7 @@ describe Autorespawn do
 
         it "executes the each time the source file changes" do
             r, child_pid, required_file = spawn_test_program(3)
-            required_file.write "puts \'RELOADED\'"
+            required_file.write "RESULT_IO.puts \'RELOADED\'"
             required_file.flush
             assert_outputs /^RELOADED\n#{child_pid}\n/, r
         end
@@ -41,14 +41,12 @@ describe Autorespawn do
         it "does not execute the block on load error, but reexecutes if a file changes" do
             r, child_pid, required_file = spawn_test_program(4)
 
-            required_file.puts "puts \'ERROR\'; raise"
-            required_file.flush
+            required_file.puts "RESULT_IO.puts \'ERROR\'; raise"
             assert_outputs /^ERROR\n/, r
 
             required_file.rewind
             required_file.truncate(0)
-            required_file.write "puts \'RELOADED\'"
-            required_file.flush
+            required_file.write "RESULT_IO.puts \'RELOADED\'"
             assert_outputs(/^RELOADED\n#{child_pid}\n/, r)
         end
 
@@ -67,7 +65,7 @@ describe Autorespawn do
             while remaining_timeout > 0
                 select [io], [], [], remaining_timeout
                 begin
-                    while s = io.read_nonblock(1)
+                    while s = io.read_nonblock(10)
                         buffer += s
                         if matcher === buffer
                             return buffer
@@ -82,12 +80,17 @@ describe Autorespawn do
 
         def spawn_test_program(exit_level)
             required_file = Tempfile.open ['autorespawn', '.rb']
+            required_file.sync = true
             r, w = IO.pipe
-            @pid = Kernel.spawn Hash['TEST_REQUIRE' => required_file.path, 'TEST_NAME' => self.name],
-                test_program_path, '--exit-level', exit_level.to_s, out: w
+            env = Hash[
+                'TEST_RESULT_IO' => w.fileno.to_s,
+                'TEST_REQUIRE' => required_file.path,
+                'TEST_NAME' => self.name]
+            @pid = Kernel.spawn env, test_program_path, '--exit-level', exit_level.to_s, w => w
             w.close
             string = assert_outputs /^\d+\n/, r
             return r, Integer(string), required_file
         end
     end
 end
+

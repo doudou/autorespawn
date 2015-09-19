@@ -95,5 +95,17 @@ class Autorespawn
                 end
             end
         end
+
+        describe "#add_slave" do
+            it "calls new slave callbacks when called" do
+                recorder = flexmock
+                recorder.should_receive(:called).
+                    once.with(name = flexmock, ['cmd'])
+                subject.on_new_slave do |slave|
+                    recorder.called(slave.name, slave.cmdline)
+                end
+                subject.add_slave('cmd', name: name)
+            end
+        end
     end
 end

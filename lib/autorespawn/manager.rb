@@ -8,11 +8,24 @@ class Autorespawn
         attr_reader :workers
         # @return [Hash<Slave>] list of active slaves
         attr_reader :active_slaves
+        # @return [Array<#call>] list of callbacks that will be called with new
+        #   slaves when they are added
+        attr_reader :slave_registration_callbacks
 
         def initialize(parallel_level: 1)
             @parallel_level = parallel_level
             @workers   = Array.new
             @active_slaves = Hash.new
+            @slave_registration_callbacks = Array.new
+        end
+
+        # Register a callback that should be called when a new slave has been
+        # added by {#add_slave}
+        #
+        # @param [#call] block the callback
+        # @yieldparam [Slave] the new slave
+        def on_new_slave(&block)
+            slave_registration_callbacks << block
         end
 
         # Spawns a worker, i.e. a program that will perform the intended work
@@ -23,6 +36,9 @@ class Autorespawn
         def add_slave(*cmdline, name: nil, **spawn_options)
             slave = Slave.new(*cmdline, name: name, **spawn_options)
             workers << slave
+            slave_registration_callbacks.each do |callback|
+                callback.call(slave)
+            end
             slave
         end
 

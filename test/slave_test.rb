@@ -84,7 +84,7 @@ class Autorespawn
                 slave.spawn
                 slave.join
                 assert slave.success?
-                assert_equal [[['ls'], Hash.new]], slave.subcommands
+                assert_equal [['ls', ['ls'], Hash.new]], slave.subcommands
             end
         end
 

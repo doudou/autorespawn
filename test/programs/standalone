@@ -26,14 +26,18 @@ require 'autorespawn'
 require 'optparse'
 
 exit_level = nil
+name = nil
 parser = OptionParser.new do |opt|
     opt.on '--exit-level=LEVEL', Integer do |l|
         exit_level = l
     end
+    opt.on '--name=NAME', String do |string|
+        name = string
+    end
 end
 parser.parse(ARGV)
 
-spawner = Autorespawn.new($0, *ARGV, RESULT_IO => RESULT_IO)
+spawner = Autorespawn.new($0, *ARGV, name: name, RESULT_IO => RESULT_IO)
 spawner.require ENV['TEST_REQUIRE']
 
 # The throw/catch here is a trick to make sure we get the code coverage output
@@ -41,6 +45,7 @@ spawner.require ENV['TEST_REQUIRE']
 spawner.at_respawn { SimpleCov.result.format! }
 spawner.run do
     RESULT_IO.puts Process.pid
+    RESULT_IO.puts spawner.name
     if exit_level && exit_level == level
         SimpleCov.result.format!
         exit 0

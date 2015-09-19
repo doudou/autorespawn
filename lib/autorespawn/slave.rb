@@ -5,6 +5,12 @@ class Autorespawn
     # Slaves have two roles: the one of discovery (what are the commands that
     # need to be started) and the one of 
     class Slave
+        # The slave's name
+        #
+        # It is an arbitrary object useful for reporting/tracking
+        #
+        # @return [Object]
+        attr_reader :name
         # The currently known program ID
         attr_reader :program_id
         # The command line of the subprocess
@@ -33,7 +39,10 @@ class Autorespawn
         # @return [String] the result data as received
         attr_reader :result_buffer
 
-        def initialize(*cmdline, env: Hash.new, **spawn_options)
+        # @param [Object] name an arbitrary object that can be used for
+        #   reporting / tracking reasons
+        def initialize(*cmdline, name: nil, env: Hash.new, **spawn_options)
+            @name = name
             @program_id = ProgramID.new
             @cmdline    = cmdline
             @needs_spawn = true
@@ -71,7 +80,7 @@ class Autorespawn
             pid = Kernel.spawn(env, *cmdline, initial_r => initial_r, result_w => result_w, **spawn_options)
             initial_r.close
             result_w.close
-            Marshal.dump(program_id, initial_w)
+            Marshal.dump([name, program_id], initial_w)
 
             @pid = pid
             @status = nil

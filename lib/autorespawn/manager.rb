@@ -17,8 +17,11 @@ class Autorespawn
 
         # Spawns a worker, i.e. a program that will perform the intended work
         # and report the program state
-        def add_slave(*cmdline, **spawn_options)
-            slave = Slave.new(*cmdline, **spawn_options)
+        #
+        # @param [Object] name an arbitrary object that can be used for
+        #   reporting / tracking
+        def add_slave(*cmdline, name: nil, **spawn_options)
+            slave = Slave.new(*cmdline, name: name, **spawn_options)
             workers << slave
             slave
         end

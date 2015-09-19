@@ -11,10 +11,10 @@ describe Autorespawn do
 
         it "passes slave definitions to a manager" do
             spawner = Autorespawn.new
-            spawner.add_slave 'cmd', priority: 10
+            spawner.add_slave 'cmd', priority: 10, name: 'test'
 
             manager = flexmock(Autorespawn::Manager).new_instances
-            manager.should_receive(:add_slave).with('cmd', priority: 10).once
+            manager.should_receive(:add_slave).with('cmd', name: 'test', priority: 10).once
             manager.should_receive(:run).once.and_return(ret = flexmock)
             assert_equal ret, spawner.run
         end
@@ -86,10 +86,11 @@ describe Autorespawn do
                 'TEST_RESULT_IO' => w.fileno.to_s,
                 'TEST_REQUIRE' => required_file.path,
                 'TEST_NAME' => self.name]
-            @pid = Kernel.spawn env, test_program_path, '--exit-level', exit_level.to_s, w => w
+            @pid = Kernel.spawn env, test_program_path, '--name', 'testname',
+                '--exit-level', exit_level.to_s, w => w
             w.close
-            string = assert_outputs /^\d+\n/, r
-            return r, Integer(string), required_file
+            string = assert_outputs /^\d+\ntestname\n/, r
+            return r, Integer(string.split("\n").first), required_file
         end
     end
 end

@@ -30,26 +30,45 @@ class Autorespawn
     SLAVE_RESULT_ENV = 'AUTORESPAWN_SLAVE_RESULT_FD'
     SLAVE_INITIAL_STATE_ENV = 'AUTORESPAWN_SLAVE_INITIAL_STATE_FD'
 
+    # ID object
+    #
+    # An arbitrary object passed to {#initialize} or {#add_slave} to identify
+    # this process.
+    #
+    # @return [nil,Object]
+    def self.name
+        @name
+    end
     def self.slave_result_fd
         @slave_result_fd
-    end
-    def self.slave_initial_state_fd
-        @slave_initial_state_fd
     end
     def self.slave?
         !!slave_result_fd
     end
-
-    # Delete the envvars first, we really don't want them to leak
-    slave_initial_state_fd = ENV.delete(SLAVE_INITIAL_STATE_ENV)
-    slave_result_fd = ENV.delete(SLAVE_RESULT_ENV)
-
-    if slave_initial_state_fd
-        @slave_initial_state_fd = Integer(slave_initial_state_fd)
+    def self.initial_program_id
+        @initial_program_id
     end
-    if slave_result_fd
-        @slave_result_fd = Integer(slave_result_fd)
+
+    def self.read_child_state
+        # Delete the envvars first, we really don't want them to leak
+        slave_initial_state_fd = ENV.delete(SLAVE_INITIAL_STATE_ENV)
+        slave_result_fd = ENV.delete(SLAVE_RESULT_ENV)
+        if slave_initial_state_fd
+            slave_initial_state_fd = Integer(slave_initial_state_fd)
+            io = IO.for_fd(slave_initial_state_fd)
+            @name, @initial_program_id = Marshal.load(io)
+            io.close
+        end
+        if slave_result_fd
+            @slave_result_fd = Integer(slave_result_fd)
+        end
     end
+    read_child_state
+
+    # An arbitrary objcet that can be used to identify the processes/slaves
+    #
+    # @return [nil,Object]
+    attr_reader :name
 
     # The arguments that should be passed to Kernel.exec in standalone mode
     #
@@ -87,13 +106,16 @@ class Autorespawn
     # In master/slave mode, the list of subcommands that the master should spawn
     attr_reader :subcommands
 
-    def initialize(*command, track_current: false, **options)
+    def initialize(*command, name: Autorespawn.name, track_current: false, **options)
         if command.empty?
             command = [$0, *ARGV]
         end
+        @name = name
+        @program_id = Autorespawn.initial_program_id ||
+            ProgramID.new
+
         @process_command_line = [command, options]
         @respawn_handlers = Array.new
-        @program_id = ProgramID.new
         @exceptions = Array.new
         @required_paths = Set.new
         @error_paths = Set.new
@@ -102,18 +124,6 @@ class Autorespawn
         if track_current
             @required_paths = currently_loaded_files.to_set
         end
-    end
-
-    # Returns true if there is an initial state dump
-    def has_initial_state?
-        !!Autorespawn.slave_initial_state_fd
-    end
-
-    # Loads the initial state from STDIN
-    def load_initial_state
-        io = IO.for_fd(Autorespawn.slave_initial_state_fd)
-        @program_id = Marshal.load(io)
-        io.close
     end
 
     # Requires one file under the autorespawn supervision
@@ -153,8 +163,8 @@ class Autorespawn
     # Request that the master spawns these subcommands
     #
     # @raise [NotSlave] if the script is being executed in standalone mode
-    def add_slave(*cmdline, **spawn_options)
-        subcommands << [cmdline, spawn_options]
+    def add_slave(*cmdline, name: nil, **spawn_options)
+        subcommands << [name, cmdline, spawn_options]
     end
 
     # Create a pipe and dump the program ID state of the current program
@@ -164,7 +174,7 @@ class Autorespawn
         program_id.register_files(files)
 
         io = Tempfile.new "autorespawn_initial_state"
-        Marshal.dump(program_id, io)
+        Marshal.dump([name, program_id], io)
         io.flush
         io.rewind
         io
@@ -227,8 +237,8 @@ class Autorespawn
                 raise ArgumentError, "cannot call #run with a block after using #add_slave"
             end
             manager = Manager.new
-            subcommands.each do |command, options|
-                manager.add_slave(*command, **options)
+            subcommands.each do |name, command, options|
+                manager.add_slave(*command, name: name, **options)
             end
             return manager.run
         end
@@ -236,10 +246,6 @@ class Autorespawn
 
     # @api private
     def perform_work(all_files, &block)
-        if has_initial_state?
-            load_initial_state
-        end
-
         not_tracked = all_files.
             find_all do |p|
                 begin !program_id.include?(p)

@@ -5,15 +5,15 @@ class Autorespawn
     describe Manager do
         subject { Manager.new }
         
-        describe "#collect_finished_slaves" do
-            def start_slave(cmd, pid: 42)
-                slave = subject.add_slave('cmd')
-                flexmock(slave).should_receive(:pid).and_return(pid)
-                flexmock(slave).should_receive(:spawn).once
-                subject.poll
-                slave
-            end
+        def start_slave(cmd, pid: 42)
+            slave = subject.add_slave('cmd')
+            flexmock(slave).should_receive(:pid).and_return(pid)
+            flexmock(slave).should_receive(:spawn).once
+            subject.poll
+            slave
+        end
 
+        describe "#collect_finished_slaves" do
             it "calls #finished on the terminated slave and returns the list of terminated slaves" do
                 slave = start_slave 'cmd', pid: 20
                 flexmock(Process).should_receive(:waitpid2).and_return([20, status = flexmock], nil)
@@ -39,6 +39,20 @@ class Autorespawn
 
             it "returns even if there is not enough slaves to fill all the available slots" do
                 subject.poll
+            end
+
+            it "registers subcommands from the slave to the worker list" do
+                slave = start_slave 'cmd', pid: 20
+                flexmock(Process).should_receive(:waitpid2).and_return([20, status = flexmock], nil)
+                flexmock(slave).should_receive(:finished).once.with(status)
+                ret = [['testname', ['cmd'], Hash.new]]
+                flexmock(slave).should_receive(:subcommands).and_return(ret)
+                recorder = flexmock
+                recorder.should_receive(:called).with('testname', ['cmd'], Hash.new).once
+                subject.on_new_slave do |slave|
+                    recorder.called(slave.name, slave.cmdline, slave.spawn_options)
+                end
+                subject.collect_finished_slaves
             end
 
             it "reorders the workers array properly even if the active slave is the last one" do

@@ -54,6 +54,9 @@ class Autorespawn
                 if slave = active_slaves.delete(pid)
                     finished_slaves << slave
                     slave.finished(status)
+                    slave.subcommands.each do |name, cmdline, spawn_options|
+                        add_slave(*cmdline, name: name, **spawn_options)
+                    end
                 end
             end
             finished_slaves

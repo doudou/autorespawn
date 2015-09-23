@@ -1,5 +1,6 @@
 source 'https://rubygems.org'
 
-gem 'flexmock', github: 'doudou/flexmock', branch: 'master'
+gem 'pry'
+gem 'pry-byebug'
 # Specify your gem's dependencies in autorespawn.gemspec
 gemspec

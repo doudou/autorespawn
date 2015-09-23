@@ -131,9 +131,14 @@ class Autorespawn
         # Collect information about the finished slaves
         #
         # @return [Array<Slave>] the slaves that finished
-        def collect_finished_slaves
+        def collect_finished_slaves(wait: false)
             finished_slaves = Array.new
-            while finished_child = Process.waitpid2(-1, Process::WNOHANG)
+            waitpid_options =
+                if wait then []
+                else [Process::WNOHANG]
+                end
+
+            while finished_child = Process.waitpid2(-1, *waitpid_options)
                 pid, status = *finished_child
                 if slave = active_slaves.delete(pid)
                     finished_slaves << slave
@@ -148,6 +153,28 @@ class Autorespawn
             finished_slaves
         rescue Errno::ECHILD
             Array.new
+        end
+
+        # Kill all active slaves
+        #
+        # @see clear
+        def kill
+            active_slaves.each { |s| s.kill(join: false) }
+            while active_slaves != [self_slave]
+                collect_finished_slaves(wait: true)
+            end
+        end
+
+        # Kill and remove all workers from this manager
+        #
+        # @see kill
+        def clear
+            kill
+            workers.dup.each do |w|
+                if w != self_slave
+                    remove_slave(w)
+                end
+            end
         end
 
         def run

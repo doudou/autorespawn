@@ -272,14 +272,7 @@ class Autorespawn
         if not_tracked.empty? && !program_id.changed?
             if exceptions.empty?
                 did_yield = true
-                _, yield_exceptions = watch_yield(&block)
-                yield_exceptions.each do |e|
-                    backtrace = (e.backtrace || Array.new).dup
-                    first_line = backtrace.shift
-                    STDERR.puts "#{e.message}: #{first_line}"
-                    STDERR.puts "  #{e.backtrace.join("\n  ")}"
-                end
-
+                watch_yield(&block)
             end
 
             all_files = required_paths | error_paths

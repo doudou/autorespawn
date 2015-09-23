@@ -1,9 +1,12 @@
 require 'set'
+require 'hooks'
+require 'autorespawn/hooks'
 require "autorespawn/version"
 require "autorespawn/exceptions"
 require "autorespawn/program_id"
 require "autorespawn/watch"
 require "autorespawn/slave"
+require "autorespawn/self"
 require "autorespawn/manager"
 
 # Automatically exec's the current program when one of the source file changes
@@ -25,6 +28,9 @@ require "autorespawn/manager"
 #   passed as-is to Kernel.spawn and Kernel.exec
 # @param options keyword options to pass to Kernel.spawn and Kernel.exec
 class Autorespawn
+    include Hooks
+    include Hooks::InstanceHooks
+
     INITIAL_STATE_FD = "AUTORESPAWN_AUTORELOAD"
 
     SLAVE_RESULT_ENV = 'AUTORESPAWN_SLAVE_RESULT_FD'
@@ -77,15 +83,26 @@ class Autorespawn
     # @return [(Array,Hash)]
     attr_reader :process_command_line
 
-    # Set of callbacks called when an exception is caught
-    #
-    # @return [Array<#call>]
-    attr_reader :exception_callbacks
+    # @!group Hooks
 
-    # Set of callbacks called just before we respawn the process
+    # @!method on_exception
     #
-    # @return [Array<#call>]
-    attr_reader :respawn_handlers
+    # Register a callback that is called whenever an exception is rescued by
+    # {#watch_yield}
+    #
+    # @yieldparam [Exception] exception
+    define_hooks :on_exception
+
+    # @!method at_exit
+    #
+    # Register a callback that is called after the block passed to {#run} has
+    # been called, but before the process gets respawned. Meant to perform what
+    # hass been done in {#run} that should be cleaned before respawning.
+    #
+    # @yieldparam [Exception] exception
+    define_hooks :at_respawn
+
+    # @!endgroup
 
     # @return [ProgramID] object currently known state of files makind this
     #   program
@@ -120,8 +137,6 @@ class Autorespawn
             ProgramID.new
 
         @process_command_line = [command, options]
-        @exception_callbacks = Array.new
-        @respawn_handlers = Array.new
         @exceptions = Array.new
         @required_paths = Set.new
         @error_paths = Set.new
@@ -150,7 +165,7 @@ class Autorespawn
             raise
         rescue Exception => e
             new_exceptions << e
-            exception_callbacks.each { |block| block.call(e) }
+            run_hook :on_exception, e
             exceptions << e
             backtrace = e.backtrace_locations.map { |l| Pathname.new(l.absolute_path) }
             error_paths.merge(backtrace)
@@ -190,16 +205,6 @@ class Autorespawn
     def currently_loaded_files
         $LOADED_FEATURES.map { |p| Pathname.new(p) } +
             caller_locations.map { |l| Pathname.new(l.absolute_path) }
-    end
-
-    def on_exception(&block)
-        exception_callbacks << block
-    end
-        
-    # Declares a handler that should be called in a process, just before
-    # exec'ing a fresh process *if* the block has been executed
-    def at_respawn(&block)
-        respawn_handlers << block
     end
 
     # Defines the exit code for this instance
@@ -289,7 +294,7 @@ class Autorespawn
                 Watch.new(program_id).wait
             end
             if did_yield
-                respawn_handlers.each { |b| b.call }
+                run_hook :at_respawn
             end
         end
         all_files

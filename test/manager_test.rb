@@ -26,7 +26,33 @@ class Autorespawn
                 flexmock(Process).should_receive(:waitpid2).and_return([20, status = flexmock], nil)
                 flexmock(slave).should_receive(:finished).once.with(status)
                 subject.collect_finished_slaves
-                assert subject.active_slaves.empty?
+                assert_equal Hash[Process.pid => subject.self_slave], subject.active_slaves
+            end
+
+            it "calls the :on_slave_finished hook with the finished slave" do
+                slave = start_slave 'cmd', pid: 20
+                flexmock(Process).should_receive(:waitpid2).and_return([20, status = flexmock], nil)
+                flexmock(slave).should_receive(:finished).once.with(status)
+
+                recorder = flexmock do |r|
+                    r.should_receive(:finished).with(slave).once
+                end
+
+                subject.on_slave_finished { |slave| recorder.finished(slave) }
+                subject.collect_finished_slaves
+            end
+        end
+
+        describe "#on_slave_start" do
+            it "calls the on_slave_start hook with the already started slaves" do
+                slave = subject.add_slave('cmd')
+                flexmock(slave).should_receive(:spawn)
+                subject.poll
+                recorder = flexmock do |r|
+                    r.should_receive(:started).with(subject.self_slave).once
+                    r.should_receive(:started).with(slave).once
+                end
+                subject.on_slave_start { |slave| recorder.started(slave) }
             end
         end
 
@@ -37,21 +63,41 @@ class Autorespawn
                 assert_equal [[slave], Array.new], subject.poll
             end
 
+            it "calls the on_slave_start hook with the self slave" do
+                recorder = flexmock do |r|
+                    r.should_receive(:started).with(subject.self_slave).once
+                end
+                subject.on_slave_start { |slave| recorder.started(slave) }
+            end
+
+            it "calls the on_slave_start hook with the started slave" do
+                slave = subject.add_slave('cmd')
+                flexmock(slave).should_receive(:spawn)
+                recorder = flexmock do |r|
+                    r.should_receive(:started).with(subject.self_slave).once
+                    r.should_receive(:started).with(slave).once
+                end
+                subject.on_slave_start { |slave| recorder.started(slave) }
+                subject.poll
+            end
+
             it "returns even if there is not enough slaves to fill all the available slots" do
                 subject.poll
             end
 
+            def mock_slave_finished(slave)
+                flexmock(Process).should_receive(:waitpid2).and_return([slave.pid, status = flexmock], nil)
+                flexmock(slave).should_receive(:finished).once.with(status)
+            end
+
             it "registers subcommands from the slave to the worker list" do
                 slave = start_slave 'cmd', pid: 20
-                flexmock(Process).should_receive(:waitpid2).and_return([20, status = flexmock], nil)
-                flexmock(slave).should_receive(:finished).once.with(status)
+                mock_slave_finished(slave)
                 ret = [['testname', ['cmd'], Hash.new]]
                 flexmock(slave).should_receive(:subcommands).and_return(ret)
-                recorder = flexmock
-                recorder.should_receive(:called).with('testname', ['cmd'], Hash.new).once
-                subject.on_new_slave do |slave|
-                    recorder.called(slave.name, slave.cmdline, slave.spawn_options)
-                end
+
+                flexmock(subject).should_receive(:add_slave).once.
+                    with('cmd', name: 'testname')
                 subject.collect_finished_slaves
             end
 
@@ -62,7 +108,7 @@ class Autorespawn
                 flexmock(slaves[0]).should_receive(:needs_spawn?).and_return(false)
 
                 subject.poll
-                assert_equal slaves, subject.workers
+                assert_equal([subject.self_slave] + slaves, subject.workers)
             end
 
             it "reorders the workers array properly even if the active slave is the first one" do
@@ -72,7 +118,7 @@ class Autorespawn
                 flexmock(slaves[1]).should_receive(:needs_spawn?).and_return(false)
 
                 subject.poll
-                assert_equal slaves.reverse, subject.workers
+                assert_equal [slaves[1], subject.self_slave, slaves[0]], subject.workers
             end
 
             it "reorders the workers array to put the slaves before the executed one at the end" do
@@ -92,8 +138,8 @@ class Autorespawn
                 after  = slaves[4..-1]
 
                 subject.poll
-                assert_equal 10, subject.workers.size
-                assert_equal (after + before + [slave]), subject.workers
+                assert_equal 11, subject.workers.size
+                assert_equal (after + [subject.self_slave] + before + [slave]), subject.workers
             end
         end
 
@@ -110,16 +156,78 @@ class Autorespawn
             end
         end
 
+        describe "#on_slave_new" do
+            it "calls the callback with the current list of slaves" do
+                slave = subject.add_slave('cmd', name: name)
+                recorder = flexmock do |r|
+                    r.should_receive(:called).with(subject.self_slave).once
+                    r.should_receive(:called).with(slave).once
+                end
+                subject.on_slave_new { |slave| recorder.called(slave) }
+            end
+        end
+
         describe "#add_slave" do
             it "calls new slave callbacks when called" do
-                recorder = flexmock
-                recorder.should_receive(:called).
-                    once.with(name = flexmock, ['cmd'])
-                subject.on_new_slave do |slave|
-                    recorder.called(slave.name, slave.cmdline)
+                name = flexmock
+                recorder = flexmock do |r|
+                    r.should_receive(:called).once.with(subject.self_slave)
+                    r.should_receive(:called).once.with(->(slave) { slave.name == name && slave.cmdline == ['cmd'] })
                 end
+                subject.on_slave_new { |slave| recorder.called(slave) }
                 subject.add_slave('cmd', name: name)
+            end
+        end
+
+        describe "#active?" do
+            let(:slave) { subject.add_slave('cmd') }
+
+            it "returns true for an active slave" do
+                mock_slave_active(slave)
+                assert subject.active?(slave)
+            end
+            it "returns false for a worker that is not active" do
+                assert !subject.active?(slave)
+            end
+            it "returns false for a slave not even included in the manager" do
+                subject.remove_slave(slave)
+                assert !subject.active?(slave)
+            end
+        end
+
+        def mock_slave_active(slave)
+            flexmock(slave).should_receive(:spawn)
+            pid = rand(40000)
+            flexmock(slave).should_receive(:pid).and_return(pid)
+            flexmock(slave).should_receive(:needs_spawn?).and_return(true)
+            subject.poll
+        end
+
+        describe "#remove_slave" do
+            attr_reader :slave
+
+            before do
+                @slave = subject.add_slave('cmd')
+            end
+
+            it "raises ArgumentError if the slave is still active" do
+                mock_slave_active(slave)
+                assert_raises(ArgumentError) { subject.remove_slave(slave) }
+            end
+
+            it "removes the slave" do
+                subject.remove_slave(slave)
+                assert !subject.include?(slave)
+            end
+
+            it "calls on_slave_removed with the slave" do
+                recorder = flexmock do |r|
+                    r.should_receive(:called).with(slave).once
+                end
+                subject.on_slave_removed { |slave| recorder.called(slave) }
+                subject.remove_slave(slave)
             end
         end
     end
 end
+

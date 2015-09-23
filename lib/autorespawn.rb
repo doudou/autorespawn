@@ -167,7 +167,18 @@ class Autorespawn
             new_exceptions << e
             run_hook :on_exception, e
             exceptions << e
-            backtrace = e.backtrace_locations.map { |l| Pathname.new(l.absolute_path) }
+            # cross-drb exceptions are broken w.r.t. #backtrace_locations. It
+            # returns a string in their case. Since it happens only on
+            # exceptions that originate from the server (which means a broken
+            # Roby codepath), let's just ignore it
+            if !e.backtrace_locations.kind_of?(String)
+                backtrace = e.backtrace_locations.map { |l| Pathname.new(l.absolute_path) }
+            else
+                STDERR.puts "Caught what appears to be a cross-drb exception, which should not happen"
+                STDERR.puts e.message
+                e.backtrace.join("\n  ")
+                backtrace = Array.new
+            end
             error_paths.merge(backtrace)
             if e.kind_of?(LoadError)
                 error_paths << e.path

@@ -19,6 +19,21 @@ class Autorespawn
             @files = Hash.new
         end
 
+        def initialize_copy(old)
+            super
+            @files = @files.dup
+        end
+
+        # Merge the information contained in another ProgramID object into self
+        #
+        # @param [ProgramID] id the object whose information we should merge
+        # @return self
+        def merge!(id)
+            @files.merge!(id.files)
+            @id = nil
+            self
+        end
+
         # Compute ID information abou thte current Ruby process
         def self.for_self
             id = ProgramID.new
@@ -40,18 +55,20 @@ class Autorespawn
         # 
         # @return [void]
         def register_loaded_features
-            search_path = ruby_load_path
-            $LOADED_FEATURES.each do |file|
-                # enumerator.so is listed in $LOADED_FEATURES but is not present
-                # on disk ... no idea
-                begin
-                    begin
-                        register_file(Pathname.new(file))
-                    rescue FileNotFound => e
-                        STDERR.puts "WARN: could not find #{e.path} in ruby search path, ignored"
-                    end
-                end
+            loaded_features = $LOADED_FEATURES.map do |file|
+                Pathname.new(file)
             end
+            register_files(loaded_features)
+        end
+
+        # Resolve a file list into absolute paths
+        def resolve_file_list(files, search_path = ruby_load_path, ignore_not_found: true)
+            files.map do |path|
+                begin resolve_file_path(path, search_path)
+                rescue FileNotFound
+                    raise if !ignore_not_found
+                end
+            end.compact
         end
 
         # Register a set of files
@@ -63,16 +80,20 @@ class Autorespawn
         # @return [Boolean] whether the program ID has been modified
         def register_files(files, search_path = ruby_load_path, ignore_not_found: true)
             modified = Array.new
-            files.each do |path|
-                begin
-                    if full_path = register_file(path, search_path)
-                        modified << full_path
-                    end
-                rescue FileNotFound
-                    raise if !ignore_not_found
-                end
+            files = resolve_file_list(files, search_path, ignore_not_found: ignore_not_found)
+            files.find_all do |path|
+                register_file(path, search_path)
             end
-            modified
+        end
+
+        # Removes any file in self that is not in the given file list and
+        # returns the result
+        def slice(files, search_path = ruby_load_path, ignore_not_found: true)
+            result = dup
+            files = resolve_file_list(files, search_path, ignore_not_found: ignore_not_found).
+                to_set
+            result.files.delete_if { |k, _| !files.include?(k) }
+            result
         end
 
         # Registers file information for one file

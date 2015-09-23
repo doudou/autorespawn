@@ -41,9 +41,11 @@ class Autorespawn
 
         # @param [Object] name an arbitrary object that can be used for
         #   reporting / tracking reasons
-        def initialize(*cmdline, name: nil, env: Hash.new, **spawn_options)
+        # @param [ProgramID] seed a seed object with some relevant files already
+        #   registered, to avoid respawning the slave unnecessarily.
+        def initialize(*cmdline, name: nil, seed: ProgramID.new, env: Hash.new, **spawn_options)
             @name = name
-            @program_id = ProgramID.new
+            @program_id = seed.dup
             @cmdline    = cmdline
             @needs_spawn = true
             @spawn_env     = env
@@ -60,6 +62,13 @@ class Autorespawn
         end
 
         def to_s; inspect end
+
+        # Register files on the program ID
+        #
+        # (see ProgramID#register_files)
+        def register_files(files, search_path = program_id.ruby_load_path, ignore_not_found: true)
+            program_id.register_files(files, search_path, ignore_not_found: ignore_not_found)
+        end
 
         # Start the slave
         #
@@ -164,6 +173,7 @@ class Autorespawn
                 @success = false
             end
             modified = program_id.register_files(file_list)
+            @program_id = program_id.slice(file_list)
             if !modified.empty?
                 @needs_spawn = true
             end

@@ -4,6 +4,12 @@ class Autorespawn
         include Hooks
         include Hooks::InstanceHooks
 
+        # @return [ProgramID] a seed object that is passed to new slaves to
+        #   represent the currently known state of file, to avoid unnecessary
+        #   respawning
+        #
+        # @see add_seed_file
+        attr_reader :seed
         # @return [Object] an object that is used to identify the manager itself
         attr_reader :name
         # @return [Self] an object that has the same API than [Slave] to
@@ -72,6 +78,13 @@ class Autorespawn
             @active_slaves = Hash[self_slave.pid => self_slave]
         end
 
+        # Add files to {#seed}
+        #
+        # (see ProgramID#register_files)
+        def register_seed_files(files, search_patch = seed.ruby_load_path, ignore_not_found: true)
+            seed.register_files(files, search_path, ignore_not_found)
+        end
+
         # Tests whether this slave is registered as a worker on self
         def include?(slave)
             workers.include?(slave)
@@ -128,6 +141,7 @@ class Autorespawn
                     slave.subcommands.each do |name, cmdline, spawn_options|
                         add_slave(*cmdline, name: name, **spawn_options)
                     end
+                    seed.merge!(slave.program_id)
                     run_hook :on_slave_finished, slave
                 end
             end

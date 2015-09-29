@@ -139,38 +139,38 @@ class Autorespawn
         # Collect information about the finished slaves
         #
         # @return [Array<Slave>] the slaves that finished
-        def collect_finished_slaves(wait: false)
+        def collect_finished_slaves
             finished_slaves = Array.new
-            waitpid_options =
-                if wait then []
-                else [Process::WNOHANG]
-                end
-
-            while finished_child = Process.waitpid2(-1, *waitpid_options)
-                pid, status = *finished_child
-                if slave = active_slaves.delete(pid)
-                    finished_slaves << slave
-                    slave.finished(status)
-                    slave.subcommands.each do |name, cmdline, spawn_options|
-                        add_slave(*cmdline, name: name, **spawn_options)
-                    end
-                    seed.merge!(slave.program_id)
-                    run_hook :on_slave_finished, slave
-                end
+            while finished_child = Process.waitpid2(-1, Process::WNOHANG)
+                finished_slaves << process_finished_slave(*finished_child)
             end
             finished_slaves
         rescue Errno::ECHILD
-            Array.new
+            finished_slaves
+        end
+
+        def process_finished_slave(pid, status)
+            return if !(slave = active_slaves.delete(pid))
+
+            slave.finished(status)
+            slave.subcommands.each do |name, cmdline, spawn_options|
+                add_slave(*cmdline, name: name, **spawn_options)
+            end
+            seed.merge!(slave.program_id)
+            run_hook :on_slave_finished, slave
+            slave
         end
 
         # Kill all active slaves
         #
         # @see clear
         def kill
-            active_slaves.each { |s| s.kill(join: false) }
-            while active_slaves != [self_slave]
-                collect_finished_slaves(wait: true)
+            active_slaves.each_value { |s| s.kill(join: false) }
+            while has_active_slaves?
+                finished_child = Process.waitpid2(-1)
+                process_finished_slave(*finished_child)
             end
+        rescue Errno::ECHILD
         end
 
         # Kill and remove all workers from this manager

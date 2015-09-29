@@ -55,7 +55,7 @@ class Autorespawn
                 assert slave.finished?
                 assert_equal 1, slave.status.exitstatus
                 assert slave.program_id.empty?, "the slave's program ID was expected to be empty, but is tracking #{slave.program_id.files.keys.join("\n  ")}"
-                assert !slave.needs_spawn?
+                assert !slave.needed?
             end
 
             it "handles slaves that terminate unexpectedly, not under Autorespawn supervision" do
@@ -65,7 +65,7 @@ class Autorespawn
                 assert !slave.success?
                 assert_equal 1, slave.status.exitstatus
                 assert slave.program_id.empty?, "the slave's program ID was expected to be empty, but is tracking #{slave.program_id.files.keys.join("\n  ")}"
-                assert !slave.needs_spawn?
+                assert !slave.needed?
             end
 
             it "adds discovered requires to the program ID" do
@@ -75,7 +75,7 @@ class Autorespawn
                     slave.join
                     assert slave.success?
                     assert slave.program_id.include?(Pathname.new(io.path))
-                    assert slave.needs_spawn?
+                    assert slave.needed?
                 end
             end
 
@@ -99,9 +99,28 @@ class Autorespawn
             end
         end
 
-        describe "#needs_spawn?" do
+        describe "#needed?" do
             it "is set on a fresh slave object" do
-                assert Slave.new('cmd').needs_spawn?
+                assert Slave.new('cmd').needed?
+            end
+            it "is false if the slave is running" do
+                slave = flexmock(Slave.new('cmd'))
+                slave.should_receive(:running?).and_return(true)
+                assert !slave.needed?
+            end
+            it "is set to true by #needed!" do
+                slave = Slave.new('cmd')
+                slave.not_needed!
+                assert !slave.needed?
+                slave.needed!
+                assert slave.needed?
+            end
+            it "is true if the program ID changed" do
+                slave = Slave.new('cmd')
+                slave.not_needed!
+                assert !slave.needed?
+                flexmock(slave).should_receive(:program_id).and_return(flexmock(:changed? => true))
+                assert slave.needed?
             end
         end
     end

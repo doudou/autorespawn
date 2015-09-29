@@ -47,7 +47,7 @@ class Autorespawn
             @name = name
             @program_id = seed.dup
             @cmdline    = cmdline
-            @needs_spawn = true
+            @needed = true
             @spawn_env     = env
             @spawn_options = spawn_options
             @subcommands = Array.new
@@ -85,7 +85,7 @@ class Autorespawn
                 SLAVE_RESULT_ENV        => result_w.fileno.to_s)
 
             program_id.refresh
-            @needs_spawn = false
+            @needed = false
             pid = Kernel.spawn(env, *cmdline, initial_r => initial_r, result_w => result_w, **spawn_options)
             initial_r.close
             result_w.close
@@ -112,8 +112,24 @@ class Autorespawn
 
         # Whether this slave would need to be spawned, either because it has
         # never be, or because the program ID changed
-        def needs_spawn?
-            @needs_spawn || !status || program_id.changed?
+        def needed?
+            !running? && (@needed || program_id.changed?)
+        end
+
+        # Marks this slave for execution
+        #
+        # Note that it will only be executed by the underlying {Manager} when
+        # (1) a slot is available and (2) it has stopped running
+        #
+        # This is usually not called directly, but through {Manager#queue} which
+        # also ensures that the slave gets in front of the execution queue
+        def needed!
+            @needed = true
+        end
+
+        # Resets {#needed?} to false
+        def not_needed!
+            @needed = false
         end
 
         # Whether the slave is running
@@ -175,7 +191,7 @@ class Autorespawn
             modified = program_id.register_files(file_list)
             @program_id = program_id.slice(file_list)
             if !modified.empty?
-                @needs_spawn = true
+                needed!
             end
             result_r.close
             modified

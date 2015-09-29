@@ -23,6 +23,8 @@ class Autorespawn
         attr_reader :workers
         # @return [Hash<Slave>] list of active slaves
         attr_reader :active_slaves
+        # @return [Array<Slave>] list of slaves explicitely queued with {#queue}
+        attr_reader :queued_slaves
 
         # @!group Hooks
 
@@ -75,6 +77,7 @@ class Autorespawn
 
             @self_slave = Self.new(name: name)
             @workers << self_slave
+            @queued_slaves = Array.new
             @active_slaves = Hash[self_slave.pid => self_slave]
         end
 
@@ -124,6 +127,11 @@ class Autorespawn
             workers << slave
             run_hook :__on_slave_new, slave
             slave
+        end
+
+        # Queue a slave for execution
+        def queue(slave)
+            queued_slaves << slave
         end
 
         # @api private
@@ -191,13 +199,18 @@ class Autorespawn
         end
 
         # Wait for children to terminate and spawns them when needed
-        def poll
+        def poll(autospawn: true)
             finished_slaves = collect_finished_slaves
             new_slaves = Array.new
             while active_slaves.size < parallel_level
-                if slave_i = workers.index { |s| s.needs_spawn? }
+                if slave = queued_slaves.find { |s| !s.running? }
+                    queued_slaves.delete(slave)
+                elsif autospawn && (slave_i = workers.index { |s| s.needed? })
                     slave = workers.delete_at(slave_i)
                     @workers = workers[slave_i..-1] + workers[0, slave_i] + [slave]
+                end
+
+                if slave
                     slave.spawn
                     run_hook :__on_slave_start, slave
                     new_slaves << slave

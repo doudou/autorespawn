@@ -141,6 +141,26 @@ class Autorespawn
                 assert_equal 11, subject.workers.size
                 assert_equal (after + [subject.self_slave] + before + [slave]), subject.workers
             end
+
+            it "executes only queued workers if autospawn is false" do
+                subject.parallel_level = 10
+                normal_slave = subject.add_slave('normal')
+                flexmock(normal_slave).should_receive(:spawn).never
+                queued_slave = subject.add_slave('cmd')
+                flexmock(queued_slave).should_receive(:spawn).once
+                subject.queue(queued_slave)
+                subject.poll(autospawn: false)
+            end
+
+            it "executes queued workers first even if autospawn is true" do
+                subject.parallel_level = 1
+                normal_slave = subject.add_slave('normal')
+                flexmock(normal_slave).should_receive(:spawn).never
+                queued_slave = subject.add_slave('cmd')
+                flexmock(queued_slave).should_receive(:spawn).once
+                subject.queue(queued_slave)
+                subject.poll
+            end
         end
 
         describe "#run" do

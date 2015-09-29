@@ -248,6 +248,37 @@ class Autorespawn
                 subject.remove_slave(slave)
             end
         end
+
+        describe "#has_active_slaves?" do
+            it "returns true if some slaves are spawned, ignoring the self slave" do
+                assert !subject.has_active_slaves?
+                slave = subject.add_slave('cmd')
+                assert !subject.has_active_slaves?
+                flexmock(slave).should_receive(:spawn)
+                subject.poll
+                assert subject.has_active_slaves?
+            end
+        end
+        describe "#slave_count" do
+            it "returns the count of slaves, ignoring the self slave" do
+                assert_equal 0, subject.slave_count
+                subject.add_slave('cmd')
+                assert_equal 1, subject.slave_count
+            end
+            it "returns true if a slave has been added explicitely" do
+                subject.add_slave('cmd')
+                assert subject.has_slaves?
+            end
+        end
+        describe "#has_slaves?" do
+            it "returns false if no slave has been added explicitely, ignoring the self slave" do
+                assert !subject.has_slaves?
+            end
+            it "returns true if a slave has been added explicitely" do
+                subject.add_slave('cmd')
+                assert subject.has_slaves?
+            end
+        end
     end
 end
 

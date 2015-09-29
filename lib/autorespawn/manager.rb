@@ -88,9 +88,25 @@ class Autorespawn
             seed.register_files(files, search_path, ignore_not_found)
         end
 
+        # Check whether this manager has slaves
+        def has_slaves?
+            # There's always a worker for self
+            workers.size != 1
+        end
+
+        # The number of slaves registered
+        def slave_count
+            workers.size - 1
+        end
+
         # Tests whether this slave is registered as a worker on self
         def include?(slave)
             workers.include?(slave)
+        end
+
+        # Tests whether this manager has some slaves that are active
+        def has_active_slaves?
+            active_slaves.size != 1
         end
 
         # Tests whether this slave is currently active on self

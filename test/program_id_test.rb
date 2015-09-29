@@ -15,6 +15,10 @@ class Autorespawn
             FakeFS::FileSystem.clear
         end
 
+        def assert_equal(expected, value)
+            assert(expected == value, "expected\n#{expected}\nand\n#{value}\nto be equal")
+        end
+
         describe "#resolve_file_path" do
             describe "when the file exists" do
                 before do
@@ -82,63 +86,6 @@ class Autorespawn
                 assert_equal path, info.require_path
                 assert_equal full_path, info.path
             end
-
-            it "computes the file ID based on the full path" do
-                flexmock(subject).should_receive(:compute_file_id).with(full_path).
-                    once.and_return("the file ID")
-                info = subject.file_info(path, search_path)
-                assert_equal "the file ID", info.id
-            end
-        end
-
-        describe "#compute_file_id" do
-            it "sanitizes spaces before computing the hash" do
-                File.open('/file.rb', 'w') do |io|
-                    io.puts
-                    io.puts "  "
-                    io.puts "    line  "
-                    io.puts "   two  three"
-                    io.puts "\t  and   four\t"
-                    io.puts
-                end
-                expected = ["line", "two three", "and four"].join("\n")
-                assert Digest::SHA1.hexdigest(expected) == subject.compute_file_id(Pathname.new('/file.rb'))
-            end
-        end
-
-        describe "#id" do
-            before do
-                FileUtils.mkdir_p '/path/to'
-                FileUtils.touch '/path/to/file1'
-                FileUtils.touch '/path/to/file2'
-            end
-
-            it "is an aggregate of the registered files" do
-                flexmock(subject).should_receive(:compute_file_id).
-                    and_return('an ID', 'another ID')
-                subject.register_file(Pathname.new('/path/to/file1'))
-                subject.register_file(Pathname.new('/path/to/file2'))
-                assert_equal Digest::SHA1.hexdigest('an IDanother ID'),
-                    subject.id
-            end
-            it "is recomputed when the list of files changes" do
-                flexmock(subject).should_receive(:compute_file_id).
-                    and_return('an ID', 'another ID')
-                subject.register_file(Pathname.new('/path/to/file1'))
-                assert_equal Digest::SHA1.hexdigest('an ID'),
-                    subject.id
-                subject.register_file(Pathname.new('/path/to/file2'))
-                assert_equal Digest::SHA1.hexdigest('an IDanother ID'),
-                    subject.id
-            end
-            it "is independent of the registration order" do
-                flexmock(subject).should_receive(:compute_file_id).
-                    and_return('another ID', 'an ID')
-                subject.register_file(Pathname.new('/path/to/file2'))
-                subject.register_file(Pathname.new('/path/to/file1'))
-                assert_equal Digest::SHA1.hexdigest('an IDanother ID'),
-                    subject.id
-            end
         end
 
         describe "#register_file" do
@@ -201,26 +148,10 @@ class Autorespawn
                 FileUtils.touch '/path/to/file2'
             end
 
-            it "returns false if only the mtime changes" do
-                p = Pathname.new('/path/to/file1')
-                flexmock(subject).should_receive(:compute_file_id).
-                    and_return('an ID', 'an ID')
-                subject.register_file(p)
+            it "returns true if the mtime changes" do
+                subject.register_file(p = Pathname.new('/path/to/file1'))
                 FileUtils.touch p
-                assert !subject.changed?
-            end
-            it "does not evaluate the file ID if the mtime and size did not change" do
-                flexmock(subject).should_receive(:compute_file_id).
-                    and_return('an ID', 'another ID')
-                subject.register_file(Pathname.new('/path/to/file1'))
-                assert !subject.changed?
-            end
-            it "returns true if both the stat and ID change" do
-                flexmock(subject).should_receive(:compute_file_id).
-                    and_return('an ID', 'another ID')
-                subject.register_file(Pathname.new('/path/to/file1'))
-                FileUtils.touch p
-                assert !subject.changed?
+                assert subject.changed?
             end
         end
     end

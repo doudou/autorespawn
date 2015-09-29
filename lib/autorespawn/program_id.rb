@@ -8,7 +8,7 @@ class Autorespawn
     # It basically stores information about all the files that form this
     # program.
     class ProgramID
-        FileInfo = Struct.new :require_path, :path, :mtime, :size, :id
+        FileInfo = Struct.new :require_path, :path, :mtime, :size
 
         # Information about the files that form this program
         #
@@ -137,22 +137,18 @@ class Autorespawn
             return @id if @id
 
             complete_id = files.keys.sort.map do |p|
-                files[p].id
+                "#{p}#{files[p].mtime}#{files[p].size}"
             end.join("")
             @id = Digest::SHA1.hexdigest(complete_id)
         end
 
         # Whether the state on disk is different than the state stored in self
         def changed?
-            files.each_value do |info|
+            files.each_value.any? do |info|
                 return true if !info.path.exist?
                 stat = info.path.stat
-                if stat.mtime != info.mtime || stat.size != info.size
-                    new_id = compute_file_id(info.path)
-                    return new_id != info.id
-                end
+                stat.mtime != info.mtime || stat.size != info.size
             end
-            false
         end
 
         def include?(path, search_path = ruby_load_path)
@@ -202,45 +198,7 @@ class Autorespawn
         def file_info(path, search_path = ruby_load_path)
             resolved = resolve_file_path(path, search_path)
             stat = resolved.stat
-            id   = compute_file_id(resolved)
-            return FileInfo.new(path, resolved, stat.mtime, stat.size, id)
-        end
-
-        # @api private
-        #
-        # Compute the content ID of a text (code) file
-        def compute_text_file_id(file)
-            sanitized = file.readlines.map do |line|
-                # Remove unnecessary spaces
-                line = line.strip
-                line = line.gsub(/\s\s+/, ' ')
-                if !line.empty?
-                    line
-                end
-            end.compact
-            Digest::SHA1.hexdigest(sanitized.join("\n"))
-        end
-
-        # @api private
-        #
-        # Compute the content ID of a binary file
-        def compute_binary_file_id(file)
-            Digest::SHA1.hexdigest(file.read(enc: 'BINARY'))
-        end
-    
-        # Compute a SHA1 that is representative of the file's contents
-        #
-        # It does some whitespace cleanup, but is not meant to be super-robust
-        # to changes that are irrelevant to the end program
-        #
-        # @param [Pathname] file the path to the file
-        # @return [String] an ID string
-        def compute_file_id(file)
-            if file.extname == ".rb"
-                compute_text_file_id(file)
-            else
-                compute_binary_file_id(file)
-            end
+            return FileInfo.new(path, resolved, stat.mtime, stat.size)
         end
     end
 end

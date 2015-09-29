@@ -12,7 +12,7 @@ class Autorespawn
         def spawn
             pid
         end
-        def kill
+        def kill(*, **)
         end
         def join
         end

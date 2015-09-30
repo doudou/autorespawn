@@ -17,7 +17,7 @@ class Autorespawn
         #   {#workers} and {#active_slaves}
         attr_reader :self_slave
         # @return [Integer] the number of processes allowed to work in parallel
-        attr_reader :parallel_level
+        attr_accessor :parallel_level
         # @return [Array<Slave>] declared worker processes, as a hash from
         #   the PID to a Slave object
         attr_reader :workers
@@ -70,7 +70,7 @@ class Autorespawn
         # @!endgroup
 
         def initialize(name: nil, parallel_level: 1)
-            @parallel_level = parallel_level + 1
+            @parallel_level = parallel_level
             @workers   = Array.new
             @name = name
             @seed = ProgramID.for_self
@@ -218,7 +218,7 @@ class Autorespawn
         def poll(autospawn: true)
             finished_slaves = collect_finished_slaves
             new_slaves = Array.new
-            while active_slaves.size < parallel_level
+            while active_slaves.size < parallel_level + 1
                 if slave = queued_slaves.find { |s| !s.running? }
                     queued_slaves.delete(slave)
                 elsif autospawn && (slave_i = workers.index { |s| s.needed? })

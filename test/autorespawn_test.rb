@@ -38,9 +38,26 @@ describe Autorespawn do
             assert_outputs /^RELOADED\n#{child_pid}\n/, r
         end
 
+        it "adds a LoadError's path to the watch list" do
+            ::Dir::Tmpname.create(['autospawn', '.rb']) do |missing_file_path, _|
+                r, child_pid, required_file = spawn_test_program(4)
+                required_file.puts <<-EOCODE
+                    begin
+                        require "#{missing_file_path}"
+                    rescue LoadError
+                        RESULT_IO.puts "LOAD_ERROR"
+                        raise
+                    end
+                EOCODE
+                assert_outputs /LOAD_ERROR/, r
+                required_file.rewind
+                required_file.truncate(0)
+                # Basically, the slave should finish by itself now
+            end
+        end
+
         it "does not execute the block on load error, but reexecutes if a file changes" do
             r, child_pid, required_file = spawn_test_program(4)
-
             required_file.puts "RESULT_IO.puts \'ERROR\'; raise"
             assert_outputs /^ERROR\n/, r
 

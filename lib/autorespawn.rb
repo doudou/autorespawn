@@ -181,7 +181,7 @@ class Autorespawn
             end
             error_paths.merge(backtrace)
             if e.kind_of?(LoadError)
-                error_paths << e.path
+                error_paths << Pathname.new(e.path)
             end
         end
         required_paths.merge(currently_loaded_files - current)

@@ -176,7 +176,7 @@ class Autorespawn
             else
                 STDERR.puts "Caught what appears to be a cross-drb exception, which should not happen"
                 STDERR.puts e.message
-                e.backtrace.join("\n  ")
+                STDERR.puts e.backtrace.join("\n  ")
                 backtrace = Array.new
             end
             error_paths.merge(backtrace)

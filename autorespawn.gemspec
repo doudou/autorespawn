@@ -31,5 +31,6 @@ EOD
   spec.add_development_dependency "minitest", ">= 5.0", "~> 5.0"
   spec.add_development_dependency "fakefs", ">= 0.6", "~> 0.6.0"
   spec.add_development_dependency 'flexmock', ">= 2.0", '~> 2.0'
+  spec.add_development_dependency "simplecov", '>= 0.11'
   spec.add_development_dependency "coveralls"
 end

@@ -117,7 +117,7 @@ class Autorespawn
             end
             it "is true if the program ID changed" do
                 slave = Slave.new('cmd')
-                slave.not_needed!
+                slave.needed_auto
                 assert !slave.needed?
                 flexmock(slave).should_receive(:program_id).and_return(flexmock(:changed? => true))
                 assert slave.needed?

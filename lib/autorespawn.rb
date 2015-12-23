@@ -8,6 +8,7 @@ require "autorespawn/watch"
 require "autorespawn/slave"
 require "autorespawn/self"
 require "autorespawn/manager"
+require 'autorespawn/tracked_file'
 
 # Automatically exec's the current program when one of the source file changes
 #

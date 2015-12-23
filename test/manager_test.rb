@@ -17,14 +17,14 @@ class Autorespawn
             it "calls #finished on the terminated slave and returns the list of terminated slaves" do
                 slave = start_slave 'cmd', pid: 20
                 flexmock(Process).should_receive(:waitpid2).and_return([20, status = flexmock], nil)
-                slave.should_receive(:finished).once.with(status)
+                slave.should_receive(:finished).once.with(status).and_return([])
                 assert_equal [slave], subject.collect_finished_slaves
             end
 
             it "removes the terminated slave from the active_slaves list" do
                 slave = start_slave 'cmd', pid: 20
                 flexmock(Process).should_receive(:waitpid2).and_return([20, status = flexmock], nil)
-                slave.should_receive(:finished).once.with(status)
+                slave.should_receive(:finished).once.with(status).and_return([])
                 subject.collect_finished_slaves
                 assert_equal Hash[Process.pid => subject.self_slave], subject.active_slaves
             end
@@ -32,7 +32,7 @@ class Autorespawn
             it "calls the :on_slave_finished hook with the finished slave" do
                 slave = start_slave 'cmd', pid: 20
                 flexmock(Process).should_receive(:waitpid2).and_return([20, status = flexmock], nil)
-                slave.should_receive(:finished).once.with(status)
+                slave.should_receive(:finished).once.with(status).and_return([])
 
                 recorder = flexmock do |r|
                     r.should_receive(:finished).with(slave).once
@@ -40,6 +40,40 @@ class Autorespawn
 
                 subject.on_slave_finished { |slave| recorder.finished(slave) }
                 subject.collect_finished_slaves
+            end
+
+            it "explicitely marks a slave whose tracked files have not been modified as not needed" do
+                # NOTE: calling #needed! if the slave changed is handled by Slave#finish
+                subject.active_slaves[42] = (slave = flexmock(subcommands: [], program_id: ProgramID.new))
+                flexmock(Process).should_receive(:waitpid2).and_return([42, flexmock], nil)
+                slave.should_receive(:each_tracked_file)
+                slave.should_receive(:finished).and_return([])
+                slave.should_receive(:needed!).never
+                slave.should_receive(:not_needed!).once
+                subject.collect_finished_slaves
+            end
+
+            it "registers the tracked files of a worker whose tracked files have been modified" do
+                subject.active_slaves[42] = (slave = flexmock(subcommands: [], program_id: ProgramID.new))
+                flexmock(Process).should_receive(:waitpid2).and_return([42, flexmock], nil)
+                slave.should_receive(:each_tracked_file).with(Hash[with_status: true], any).
+                    and_yield(['/path', mtime = Time.now, 10])
+                slave.should_receive(:finished).and_return([flexmock])
+                subject.collect_finished_slaves
+                assert subject.tracked_files.empty?
+            end
+
+            it "registers the tracked files after a worker finishes" do
+                subject.active_slaves[42] = (slave = flexmock(subcommands: [], program_id: ProgramID.new, not_needed!: nil))
+                flexmock(Process).should_receive(:waitpid2).and_return([42, flexmock], nil)
+                slave.should_receive(:each_tracked_file).with(Hash[with_status: true], any).
+                    and_yield(['/path', mtime = Time.now, 10])
+                slave.should_receive(:finished).and_return([])
+                subject.collect_finished_slaves
+
+                assert_equal mtime, subject.tracked_files['/path'].mtime
+                assert_equal 10, subject.tracked_files['/path'].size
+                assert_equal [slave], subject.tracked_files['/path'].slaves
             end
         end
 
@@ -87,7 +121,7 @@ class Autorespawn
 
             def mock_slave_finished(slave)
                 flexmock(Process).should_receive(:waitpid2).and_return([slave.pid, status = flexmock], nil)
-                flexmock(slave).should_receive(:finished).once.with(status)
+                flexmock(slave).should_receive(:finished).once.with(status).and_return([])
             end
 
             it "registers subcommands from the slave to the worker list" do
@@ -160,6 +194,25 @@ class Autorespawn
                 flexmock(queued_slave).should_receive(:spawn).once
                 subject.queue(queued_slave)
                 subject.poll
+            end
+        end
+
+        describe "#trigger_slaves_as_necessary" do
+            it "marks new workers as needed if the associated tracked files have changed" do
+                subject.tracked_files['/entry'] = flexmock(
+                    update: true,
+                    slaves: [slave = flexmock])
+                slave.should_receive(:needed? => false)
+                slave.should_receive(:needed!).once
+
+                subject.trigger_slaves_as_necessary
+                assert subject.tracked_files.empty?
+            end
+
+            it "removes slaves that are already marked as needed before calling #update" do
+                subject.tracked_files['/entry'] = flexmock(slaves: [flexmock(:needed? => true)])
+                subject.trigger_slaves_as_necessary
+                assert subject.tracked_files.empty?
             end
         end
 

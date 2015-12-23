@@ -7,7 +7,7 @@ class Autorespawn
             @pid = Process.pid
         end
 
-        def needed?; false end
+        def needed?(*); false end
         def needed!; end
         def spawn
             pid

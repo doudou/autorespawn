@@ -25,6 +25,9 @@ class Autorespawn
         attr_reader :active_slaves
         # @return [Array<Slave>] list of slaves explicitely queued with {#queue}
         attr_reader :queued_slaves
+        # @return [Hash<Pathname,TrackedFile>] the whole set of files that are
+        #   tracked by this manager's slaves
+        attr_reader :tracked_files
 
         # @!group Hooks
 
@@ -74,6 +77,7 @@ class Autorespawn
             @workers   = Array.new
             @name = name
             @seed = ProgramID.for_self
+            @tracked_files = Hash.new
 
             @self_slave = Self.new(name: name)
             @workers << self_slave
@@ -121,6 +125,7 @@ class Autorespawn
         #   reporting / tracking
         def add_slave(*cmdline, name: nil, **spawn_options)
             slave = Slave.new(*cmdline, name: name, seed: seed, **spawn_options)
+            slave.needed!
             register_slave(slave)
             slave
         end
@@ -168,11 +173,20 @@ class Autorespawn
         def process_finished_slave(pid, status)
             return if !(slave = active_slaves.delete(pid))
 
-            slave.finished(status)
+            if slave.finished(status).empty?
+                # Do not register the slave if it is already marked as needed?
+                slave.each_tracked_file(with_status: true) do |path, mtime, size|
+                    tracker = (tracked_files[path] ||= TrackedFile.new(path, mtime: mtime, size: size))
+                    tracker.slaves << slave
+                end
+                slave.not_needed!
+            end
+
             slave.subcommands.each do |name, cmdline, spawn_options|
                 add_slave(*cmdline, name: name, **spawn_options)
             end
             seed.merge!(slave.program_id)
+
             run_hook :on_slave_finished, slave
             slave
         end
@@ -214,10 +228,25 @@ class Autorespawn
             end
         end
 
+        def trigger_slaves_as_necessary
+            tracked_files.delete_if do |path, tracker|
+                tracker.slaves.delete_if(&:needed?)
+                if tracker.slaves.empty?
+                    true
+                elsif tracker.update
+                    tracker.slaves.each(&:needed!)
+                    true
+                end
+            end
+        end
+
         # Wait for children to terminate and spawns them when needed
-        def poll(autospawn: true)
+        def poll(autospawn: true, update_files: true)
             finished_slaves = collect_finished_slaves
             new_slaves = Array.new
+
+            trigger_slaves_as_necessary
+
             while active_slaves.size < parallel_level + 1
                 if slave = queued_slaves.find { |s| !s.running? }
                     queued_slaves.delete(slave)
@@ -228,6 +257,9 @@ class Autorespawn
 
                 if slave
                     slave.spawn
+                    # We manually track the slave's needed flag, just forcefully
+                    # set it to false at that point
+                    slave.not_needed!
                     run_hook :__on_slave_start, slave
                     new_slaves << slave
                     active_slaves[slave.pid] = slave

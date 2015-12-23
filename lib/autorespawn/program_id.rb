@@ -128,8 +128,15 @@ class Autorespawn
         # Enumerate the path of all the files that are being tracked
         #
         # @yieldparam [Pathname] path
-        def each_tracked_file(&block)
-            files.keys.each(&block)
+        def each_tracked_file(with_status: false, &block)
+            if with_status
+                return enum_for(__method__, with_status: true) if !block_given?
+                files.each do |path, info|
+                    yield(path, info.mtime, info.size)
+                end
+            else
+                files.keys.each(&block)
+            end
         end
 
         # Returns a string that can ID this program

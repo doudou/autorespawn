@@ -61,6 +61,11 @@ class Autorespawn
             "#<Autorespawn::Slave #{object_id.to_s(16)} #{cmdline.join(" ")}>"
         end
 
+        # Enumerate the files that are tracked for {#needed?}
+        def each_tracked_file(with_status: false, &block)
+            @program_id.each_tracked_file(with_status: with_status, &block)
+        end
+
         def to_s; inspect end
 
         # Register files on the program ID
@@ -85,7 +90,7 @@ class Autorespawn
                 SLAVE_RESULT_ENV        => result_w.fileno.to_s)
 
             program_id.refresh
-            @needed = false
+            @needed = nil
             pid = Kernel.spawn(env, *cmdline, initial_r => initial_r, result_w => result_w, **spawn_options)
             initial_r.close
             result_w.close
@@ -113,7 +118,11 @@ class Autorespawn
         # Whether this slave would need to be spawned, either because it has
         # never be, or because the program ID changed
         def needed?
-            !running? && (@needed || program_id.changed?)
+            if running? then false
+            elsif !@needed.nil?
+                @needed
+            else program_id.changed?
+            end
         end
 
         # Marks this slave for execution
@@ -127,9 +136,16 @@ class Autorespawn
             @needed = true
         end
 
-        # Resets {#needed?} to false
+        # Forces {#needed?} to return false
+        #
+        # Call {#needed_auto} to revert back to determining if the slave is
+        # needed or not using the tracked files
         def not_needed!
             @needed = false
+        end
+
+        def needed_auto
+            @needed = nil
         end
 
         # Whether the slave is running
@@ -177,6 +193,9 @@ class Autorespawn
         # Announce that the slave already finished, with the given exit status
         #
         # @param [Process::Status] the exit status
+        # @return [Array<Pathname>] a set of files that either changed or got
+        #   added since the call to {#spawn}. If not empty, the slave calls
+        #   {#needed!} by itself to force a re-execution
         def finished(status)
             @status = status
             read_queued_result
@@ -188,8 +207,8 @@ class Autorespawn
                 file_list = Array.new
                 @success = false
             end
-            modified = program_id.register_files(file_list)
             @program_id = program_id.slice(file_list)
+            modified = program_id.register_files(file_list)
             if !modified.empty?
                 needed!
             end

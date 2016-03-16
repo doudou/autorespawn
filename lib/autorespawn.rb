@@ -181,7 +181,7 @@ class Autorespawn
                 backtrace = Array.new
             end
             error_paths.merge(backtrace)
-            if e.kind_of?(LoadError)
+            if e.kind_of?(LoadError) && e.path
                 error_paths << Pathname.new(e.path)
             end
         end

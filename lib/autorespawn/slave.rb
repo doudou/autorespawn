@@ -212,6 +212,7 @@ class Autorespawn
             if !modified.empty?
                 needed!
             end
+            @success = @success && status.success?
             result_r.close
             modified
         end

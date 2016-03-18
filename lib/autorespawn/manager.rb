@@ -250,9 +250,10 @@ class Autorespawn
             while active_slaves.size < parallel_level + 1
                 if slave = queued_slaves.find { |s| !s.running? }
                     queued_slaves.delete(slave)
-                elsif autospawn && (slave_i = workers.index { |s| s.needed? })
-                    slave = workers.delete_at(slave_i)
-                    @workers = workers[slave_i..-1] + workers[0, slave_i] + [slave]
+                elsif autospawn
+                    needed_slaves, remaining = workers.partition { |s| !s.running? && s.needed? }
+                    failed, normal = needed_slaves.partition { |s| s.finished? && !s.success? }
+                    slave = failed.first || normal.first
                 end
 
                 if slave

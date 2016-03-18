@@ -7,8 +7,13 @@ class Autorespawn
         
         def start_slave(cmd, pid: 42)
             slave = subject.add_slave('cmd')
-            slave = flexmock(slave, needed?: true, pid: pid)
-            slave.should_receive(:spawn).once
+            slave = flexmock(slave)
+            slave_pid = nil
+            slave.should_receive(:pid).and_return { slave_pid }
+            slave.should_receive(:spawn).once.and_return do
+                slave_pid = pid
+                nil
+            end
             subject.poll
             slave
         end
@@ -97,6 +102,13 @@ class Autorespawn
                 assert_equal [[slave], Array.new], subject.poll
             end
 
+            it "marks new workers as active" do
+                slave = subject.add_slave('cmd')
+                flexmock(slave).should_receive(:spawn).once
+                subject.poll
+                assert subject.active?(slave)
+            end
+
             it "calls the on_slave_start hook with the self slave" do
                 recorder = flexmock do |r|
                     r.should_receive(:started).with(subject.self_slave).once
@@ -135,47 +147,6 @@ class Autorespawn
                 subject.collect_finished_slaves
             end
 
-            it "reorders the workers array properly even if the active slave is the last one" do
-                slaves = [subject.add_slave('cmd'), subject.add_slave('cmd')]
-                flexmock(slaves[1]).should_receive(:needed?).and_return(true)
-                flexmock(slaves[1]).should_receive(:spawn).once
-                flexmock(slaves[0]).should_receive(:needed?).and_return(false)
-
-                subject.poll
-                assert_equal([subject.self_slave] + slaves, subject.workers)
-            end
-
-            it "reorders the workers array properly even if the active slave is the first one" do
-                slaves = [subject.add_slave('cmd'), subject.add_slave('cmd')]
-                flexmock(slaves[0]).should_receive(:needed?).and_return(true)
-                flexmock(slaves[0]).should_receive(:spawn).once
-                flexmock(slaves[1]).should_receive(:needed?).and_return(false)
-
-                subject.poll
-                assert_equal [slaves[1], subject.self_slave, slaves[0]], subject.workers
-            end
-
-            it "reorders the workers array to put the slaves before the executed one at the end" do
-                slaves = (0..9).map do |i|
-                    slave = subject.add_slave('cmd')
-                    if i == 3
-                        flexmock(slave).should_receive(:needed?).and_return(true)
-                        flexmock(slave).should_receive(:spawn).once
-                    else
-                        flexmock(slave).should_receive(:needed?).and_return(false)
-                        flexmock(slave).should_receive(:spawn).never
-                    end
-                    slave
-                end
-                before = slaves[0..2]
-                slave  = slaves[3]
-                after  = slaves[4..-1]
-
-                subject.poll
-                assert_equal 11, subject.workers.size
-                assert_equal (after + [subject.self_slave] + before + [slave]), subject.workers
-            end
-
             it "executes only queued workers if autospawn is false" do
                 subject.parallel_level = 10
                 normal_slave = subject.add_slave('normal')
@@ -193,6 +164,16 @@ class Autorespawn
                 queued_slave = subject.add_slave('cmd')
                 flexmock(queued_slave).should_receive(:spawn).once
                 subject.queue(queued_slave)
+                subject.poll
+            end
+
+            it "executes failed workers first" do
+                subject.parallel_level = 1
+                normal_slave = subject.add_slave('normal')
+                flexmock(normal_slave).should_receive(:spawn).never
+                failed_slave = subject.add_slave('failed')
+                flexmock(failed_slave, success?: false, finished?: true).should_receive(:spawn).once
+
                 subject.poll
             end
         end
@@ -255,10 +236,6 @@ class Autorespawn
         describe "#active?" do
             let(:slave) { subject.add_slave('cmd') }
 
-            it "returns true for an active slave" do
-                mock_slave_active(slave)
-                assert subject.active?(slave)
-            end
             it "returns false for a worker that is not active" do
                 assert !subject.active?(slave)
             end
@@ -266,14 +243,6 @@ class Autorespawn
                 subject.remove_slave(slave)
                 assert !subject.active?(slave)
             end
-        end
-
-        def mock_slave_active(slave)
-            flexmock(slave).should_receive(:spawn)
-            pid = rand(40000)
-            flexmock(slave).should_receive(:pid).and_return(pid)
-            flexmock(slave).should_receive(:needed?).and_return(true)
-            subject.poll
         end
 
         describe "#remove_slave" do
@@ -284,7 +253,7 @@ class Autorespawn
             end
 
             it "raises ArgumentError if the slave is still active" do
-                mock_slave_active(slave)
+                flexmock(subject).should_receive(:active?).with(slave).and_return(true)
                 assert_raises(ArgumentError) { subject.remove_slave(slave) }
             end
 
@@ -312,6 +281,7 @@ class Autorespawn
                 assert subject.has_active_slaves?
             end
         end
+
         describe "#slave_count" do
             it "returns the count of slaves, ignoring the self slave" do
                 assert_equal 0, subject.slave_count

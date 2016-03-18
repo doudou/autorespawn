@@ -36,23 +36,33 @@ class Autorespawn
             end
 
             it "calling it on an already-running slave does not interfere with the slave" do
-                slave = slave(File.join(programs_dir, 'slave'), '--exit', '1')
+                slave = slave(File.join(programs_dir, 'slave'), '--exit', '0')
                 slave.spawn
                 assert_raises(AlreadyRunning) { slave.spawn }
                 assert slave.running?
                 slave.join
                 assert slave.success?
                 assert slave.finished?
-                assert_equal 1, slave.status.exitstatus
+                assert_equal 0, slave.status.exitstatus
             end
             it "starts and joins the slave" do
-                slave = slave(File.join(programs_dir, 'slave'), '--exit', '1')
+                slave = slave(File.join(programs_dir, 'slave'), '--exit', '0')
                 slave.spawn
                 assert slave.running?
                 assert !slave.finished?
                 slave.join
                 assert slave.success?
                 assert slave.finished?
+                assert_equal 0, slave.status.exitstatus
+                assert slave.program_id.empty?, "the slave's program ID was expected to be empty, but is tracking #{slave.program_id.files.keys.join("\n  ")}"
+                assert !slave.needed?
+            end
+
+            it "reports a failure on a non-zero exit code" do
+                slave = slave(File.join(programs_dir, 'slave'), '--exit', '1')
+                slave.spawn
+                slave.join
+                assert !slave.success?
                 assert_equal 1, slave.status.exitstatus
                 assert slave.program_id.empty?, "the slave's program ID was expected to be empty, but is tracking #{slave.program_id.files.keys.join("\n  ")}"
                 assert !slave.needed?

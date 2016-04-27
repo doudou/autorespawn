@@ -43,7 +43,7 @@ class Autorespawn
                     r.should_receive(:finished).with(slave).once
                 end
 
-                subject.on_slave_finished { |slave| recorder.finished(slave) }
+                subject.on_slave_finished { |finished_slave| recorder.finished(finished_slave) }
                 subject.collect_finished_slaves
             end
 
@@ -62,7 +62,7 @@ class Autorespawn
                 subject.active_slaves[42] = (slave = flexmock(subcommands: [], program_id: ProgramID.new))
                 flexmock(Process).should_receive(:waitpid2).and_return([42, flexmock], nil)
                 slave.should_receive(:each_tracked_file).with(Hash[with_status: true], any).
-                    and_yield(['/path', mtime = Time.now, 10])
+                    and_yield(['/path', Time.now, 10])
                 slave.should_receive(:finished).and_return([flexmock])
                 subject.collect_finished_slaves
                 assert subject.tracked_files.empty?
@@ -91,7 +91,7 @@ class Autorespawn
                     r.should_receive(:started).with(subject.self_slave).once
                     r.should_receive(:started).with(slave).once
                 end
-                subject.on_slave_start { |slave| recorder.started(slave) }
+                subject.on_slave_start { |started_slave| recorder.started(started_slave) }
             end
         end
 
@@ -123,7 +123,7 @@ class Autorespawn
                     r.should_receive(:started).with(subject.self_slave).once
                     r.should_receive(:started).with(slave).once
                 end
-                subject.on_slave_start { |slave| recorder.started(slave) }
+                subject.on_slave_start { |started_slave| recorder.started(started_slave) }
                 subject.poll
             end
 
@@ -217,7 +217,7 @@ class Autorespawn
                     r.should_receive(:called).with(subject.self_slave).once
                     r.should_receive(:called).with(slave).once
                 end
-                subject.on_slave_new { |slave| recorder.called(slave) }
+                subject.on_slave_new { |new_slave| recorder.called(new_slave) }
             end
         end
 

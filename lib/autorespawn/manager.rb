@@ -251,7 +251,7 @@ class Autorespawn
                 if slave = queued_slaves.find { |s| !s.running? }
                     queued_slaves.delete(slave)
                 elsif autospawn
-                    needed_slaves, remaining = workers.partition { |s| !s.running? && s.needed? }
+                    needed_slaves, _remaining = workers.partition { |s| !s.running? && s.needed? }
                     failed, normal = needed_slaves.partition { |s| s.finished? && !s.success? }
                     slave = failed.first || normal.first
                 end

@@ -1,4 +1,3 @@
-require 'autorespawn/program_id'
 require 'pathname'
 require 'digest/sha1'
 

@@ -9,6 +9,7 @@ require "autorespawn/slave"
 require "autorespawn/self"
 require "autorespawn/manager"
 require 'autorespawn/tracked_file'
+require 'tempfile'
 
 # Automatically exec's the current program when one of the source file changes
 #
@@ -55,6 +56,7 @@ class Autorespawn
     def self.initial_program_id
         @initial_program_id
     end
+    @name, @slave_result_fd, @initial_program_id = nil
 
     def self.read_child_state
         # Delete the envvars first, we really don't want them to leak

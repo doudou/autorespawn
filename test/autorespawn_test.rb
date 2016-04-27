@@ -3,6 +3,9 @@ require 'autorespawn/program_id'
 
 describe Autorespawn do
     describe '#run' do
+        before do
+            @pid = nil
+        end
         after do
             if @pid
                 Process.waitpid2 @pid
@@ -35,12 +38,12 @@ describe Autorespawn do
             r, child_pid, required_file = spawn_test_program(3)
             required_file.write "RESULT_IO.puts \'RELOADED\'"
             required_file.flush
-            assert_outputs /^RELOADED\n#{child_pid}\n/, r
+            assert_outputs(/^RELOADED\n#{child_pid}\n/, r)
         end
 
         it "adds a LoadError's path to the watch list" do
             ::Dir::Tmpname.create(['autospawn', '.rb']) do |missing_file_path, _|
-                r, child_pid, required_file = spawn_test_program(4)
+                r, _child_pid, required_file = spawn_test_program(4)
                 required_file.puts <<-EOCODE
                     begin
                         require "#{missing_file_path}"
@@ -49,7 +52,7 @@ describe Autorespawn do
                         raise
                     end
                 EOCODE
-                assert_outputs /LOAD_ERROR/, r
+                assert_outputs(/LOAD_ERROR/, r)
                 required_file.rewind
                 required_file.truncate(0)
                 # Basically, the slave should finish by itself now
@@ -59,7 +62,7 @@ describe Autorespawn do
         it "does not execute the block on load error, but reexecutes if a file changes" do
             r, child_pid, required_file = spawn_test_program(4)
             required_file.puts "RESULT_IO.puts \'ERROR\'; raise"
-            assert_outputs /^ERROR\n/, r
+            assert_outputs(/^ERROR\n/, r)
 
             required_file.rewind
             required_file.truncate(0)
@@ -106,7 +109,7 @@ describe Autorespawn do
             @pid = Kernel.spawn env, test_program_path, '--name', 'testname',
                 '--exit-level', exit_level.to_s, w => w
             w.close
-            string = assert_outputs /^\d+\ntestname\n/, r
+            string = assert_outputs(/^\d+\ntestname\n/, r)
             return r, Integer(string.split("\n").first), required_file
         end
     end

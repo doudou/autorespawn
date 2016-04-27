@@ -94,7 +94,7 @@ class Autorespawn
                 @dir = Pathname('/path/to')
                 dir.mkpath
                 @path = Pathname('/path/to/file1')
-                FileUtils.touch(path)
+                FileUtils.touch(path.to_s)
             end
 
             it "returns the full path to the file if it was not registered" do
@@ -121,7 +121,7 @@ class Autorespawn
                 @paths = Array.new
                 paths << Pathname('/path/to/file1')
                 paths << Pathname('/path/to/file2')
-                paths.each { |p| FileUtils.touch(p) }
+                paths.each { |p| FileUtils.touch(p.to_s) }
             end
             it "registers all the provided filed" do
                 subject.register_files([Pathname('file1'), Pathname('file2')], [dir])
@@ -150,7 +150,7 @@ class Autorespawn
 
             it "returns true if the mtime changes" do
                 subject.register_file(p = Pathname.new('/path/to/file1'))
-                FileUtils.touch p
+                FileUtils.touch p.to_s
                 assert subject.changed?
             end
         end

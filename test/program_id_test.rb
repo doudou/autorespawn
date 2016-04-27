@@ -81,9 +81,8 @@ class Autorespawn
                 @full_path = Pathname.new('/path/to/file')
             end
 
-            it "resolves the file" do
-                info = subject.file_info(path, search_path)
-                assert_equal path, info.require_path
+            it "creates a FileInfo object for the file" do
+                info = subject.file_info(full_path)
                 assert_equal full_path, info.path
             end
         end
@@ -98,18 +97,18 @@ class Autorespawn
             end
 
             it "returns the full path to the file if it was not registered" do
-                assert_equal path, subject.register_file(Pathname('file1'), [dir])
+                assert_equal path, subject.register_file(path)
             end
 
             it "returns the full path to the file if it has changed" do
-                subject.register_file(Pathname('file1'), [dir])
-                FileUtils.touch(path)
-                assert_equal path, subject.register_file(Pathname('file1'), [dir])
+                subject.register_file(path)
+                FileUtils.touch(path.to_s)
+                assert_equal path, subject.register_file(path)
             end
             
             it "returns nil if a file was already registered and did not change" do
-                subject.register_file(Pathname('file1'), [dir])
-                assert_nil subject.register_file(Pathname('file1'), [dir])
+                subject.register_file(path)
+                assert_nil subject.register_file(path)
             end
         end
 
@@ -124,20 +123,20 @@ class Autorespawn
                 paths.each { |p| FileUtils.touch(p.to_s) }
             end
             it "registers all the provided filed" do
-                subject.register_files([Pathname('file1'), Pathname('file2')], [dir])
+                subject.register_files(paths)
                 paths.each do |p|
                     assert subject.include?(p)
                 end
             end
             it "returns the list of full paths for those that got newly registered" do
                 assert_equal paths,
-                    subject.register_files([Pathname('file1'), Pathname('file2')], [dir])
+                    subject.register_files(paths)
             end
             it "returns the list of full paths for those that changed" do
-                subject.register_files([Pathname('file1'), Pathname('file2')], [dir])
-                FileUtils.touch(paths[0])
+                subject.register_files(paths)
+                FileUtils.touch(paths[0].to_s)
                 assert_equal [paths[0]],
-                    subject.register_files([Pathname('file1'), Pathname('file2')], [dir])
+                    subject.register_files(paths)
             end
         end
 

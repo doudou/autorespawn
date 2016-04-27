@@ -7,7 +7,7 @@ class Autorespawn
     # It basically stores information about all the files that form this
     # program.
     class ProgramID
-        FileInfo = Struct.new :require_path, :path, :mtime, :size
+        FileInfo = Struct.new :path, :mtime, :size
 
         # Information about the files that form this program
         #
@@ -57,7 +57,7 @@ class Autorespawn
             loaded_features = $LOADED_FEATURES.map do |file|
                 Pathname.new(file)
             end
-            register_files(loaded_features)
+            register_files(resolve_file_list(loaded_features))
         end
 
         # Resolve a file list into absolute paths
@@ -77,21 +77,31 @@ class Autorespawn
         # @param [Boolean] ignore_not_found whether files that cannot be
         #   resolved are ignored or cause a FileNotFound exception
         # @return [Boolean] whether the program ID has been modified
-        def register_files(files, search_path = ruby_load_path, ignore_not_found: true)
-            modified = Array.new
-            files = resolve_file_list(files, search_path, ignore_not_found: ignore_not_found)
+        def register_files(files, ignore_not_found: true)
             files.find_all do |path|
-                register_file(path, search_path)
+                if path.exist?
+                    register_file(path)
+                elsif ignore_not_found
+                    false
+                else raise FileNotFound, "#{path} cannot be found"
+                end
             end
         end
 
         # Removes any file in self that is not in the given file list and
         # returns the result
-        def slice(files, search_path = ruby_load_path, ignore_not_found: true)
+        def slice(files, ignore_not_found: true)
             result = dup
-            files = resolve_file_list(files, search_path, ignore_not_found: ignore_not_found).
-                to_set
-            result.files.delete_if { |k, _| !files.include?(k) }
+            result.files.delete_if do |k, _|
+                if !files.include?(k)
+                    true
+                elsif !k.exist?
+                    if !ignore_not_found
+                        raise FileNotFound, "#{k} does not exist"
+                    end
+                    true
+                end
+            end
             result
         end
 
@@ -100,8 +110,8 @@ class Autorespawn
         # @param [Pathname] file the path to the file
         # @return [Boolean] whether the registration modified the program ID's
         #   state
-        def register_file(file, search_path = ruby_load_path)
-            info = file_info(file, search_path)
+        def register_file(file)
+            info = file_info(file)
             modified = (files[info.path] != info)
             files[info.path] = info
 
@@ -192,19 +202,16 @@ class Autorespawn
         #
         # @param [Array<Pathname>]
         def ruby_load_path
-            $LOAD_PATH.map { |p| Pathname.new(p) }
+            @ruby_load_path ||= $LOAD_PATH.map { |p| Pathname.new(p) }
         end
 
         # Resolve file information about a single file
         #
-        # @param [Pathname] path the path to the file
-        # @param [Array<Pathname>] search_path the search path to use to resolve
-        #    'path' if it is relative
+        # @param [Pathname] path abolute path to the file
         # @return [FileInfo]
-        def file_info(path, search_path = ruby_load_path)
-            resolved = resolve_file_path(path, search_path)
-            stat = resolved.stat
-            return FileInfo.new(path, resolved, stat.mtime, stat.size)
+        def file_info(path)
+            stat = path.stat
+            return FileInfo.new(path, stat.mtime, stat.size)
         end
     end
 end

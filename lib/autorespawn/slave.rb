@@ -71,8 +71,8 @@ class Autorespawn
         # Register files on the program ID
         #
         # (see ProgramID#register_files)
-        def register_files(files, search_path = program_id.ruby_load_path, ignore_not_found: true)
-            program_id.register_files(files, search_path, ignore_not_found: ignore_not_found)
+        def register_files(files)
+            program_id.register_files(files)
         end
 
         # Start the slave

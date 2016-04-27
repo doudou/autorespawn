@@ -89,7 +89,8 @@ class Autorespawn
         #
         # (see ProgramID#register_files)
         def register_seed_files(files, search_patch = seed.ruby_load_path, ignore_not_found: true)
-            seed.register_files(files, search_path, ignore_not_found)
+            files = seed.resolve_file_list(files, search_path, ignore_not_found: ignore_not_found)
+            seed.register_files(files)
         end
 
         # Check whether this manager has slaves

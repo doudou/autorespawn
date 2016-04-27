@@ -12,6 +12,9 @@ class Autorespawn
         def spawn
             pid
         end
+        def write_initial_dump
+            true
+        end
         def kill(*, **)
         end
         def join

@@ -247,6 +247,7 @@ class Autorespawn
             new_slaves = Array.new
 
             trigger_slaves_as_necessary
+            active_slaves.each_value.each(&:write_initial_dump)
 
             while active_slaves.size < parallel_level + 1
                 if slave = queued_slaves.find { |s| !s.running? }
@@ -258,7 +259,7 @@ class Autorespawn
                 end
 
                 if slave
-                    slave.spawn
+                    slave.spawn(send_initial_dump: false)
                     # We manually track the slave's needed flag, just forcefully
                     # set it to false at that point
                     slave.not_needed!

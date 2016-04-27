@@ -65,7 +65,8 @@ class Autorespawn
         if slave_initial_state_fd
             slave_initial_state_fd = Integer(slave_initial_state_fd)
             io = IO.for_fd(slave_initial_state_fd)
-            @name, @initial_program_id = Marshal.load(io)
+            size = io.read(4).unpack('L<').first
+            @name, @initial_program_id = Marshal.load(io.read(size))
             io.close
         end
         if slave_result_fd
@@ -207,10 +208,13 @@ class Autorespawn
     # there
     def dump_initial_state(files)
         program_id = ProgramID.new
+        files = program_id.resolve_file_list(files)
         program_id.register_files(files)
 
         io = Tempfile.new "autorespawn_initial_state"
-        Marshal.dump([name, program_id], io)
+        initial_info = Marshal.dump([name, program_id])
+        io.write([initial_info.size].pack("L<"))
+        io.write(initial_info)
         io.flush
         io.rewind
         io

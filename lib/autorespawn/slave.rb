@@ -38,6 +38,15 @@ class Autorespawn
         #
         # @return [String] the result data as received
         attr_reader :result_buffer
+        # @api private
+        #
+        # @return [IO] the IO used to transmit initial information to the slave
+        attr_reader :initial_w
+        # @api private
+        #
+        # @return [String] what is remaining of the initial dump that should be
+        #   passed to the slave
+        attr_reader :initial_dump
 
         # @param [Object] name an arbitrary object that can be used for
         #   reporting / tracking reasons
@@ -77,8 +86,15 @@ class Autorespawn
 
         # Start the slave
         #
+        # @param [Boolean] send_initial_dump Initial information is sent to the
+        #   slave through the {#initial_w} pipe. This transmission can be done
+        #   asynchronously by setting this flag to true. In this case, the
+        #   caller should make sure that {#write_initial_dump} is called after
+        #   {#spawn} until it returns true. Note that {Manager#poll} takes care
+        #   of this already
+        #
         # @return [Integer] the slave's PID
-        def spawn
+        def spawn(send_initial_dump: true)
             if running?
                 raise AlreadyRunning, "cannot call #spawn on #{self}: already running"
             end
@@ -94,7 +110,14 @@ class Autorespawn
             pid = Kernel.spawn(env, *cmdline, initial_r => initial_r, result_w => result_w, **spawn_options)
             initial_r.close
             result_w.close
-            Marshal.dump([name, program_id], initial_w)
+            @initial_w = initial_w
+            @initial_dump = Marshal.dump([name, program_id])
+            initial_w.write([initial_dump.size].pack("L<"))
+            if send_initial_dump
+                while !write_initial_dump
+                    select([], [initial_w])
+                end
+            end
 
             @pid = pid
             @status = nil
@@ -102,17 +125,33 @@ class Autorespawn
             @result_r = result_r
             pid
 
-        rescue Exception => e
+        rescue Exception
             if pid
                 Process.kill 'TERM', pid
             end
+            initial_w.close if initial_w && !initial_w.closed?
+            initial_r.close if initial_r && !initial_r.closed?
+            result_w.close if result_w && !result_w.closed?
             result_r.close if result_r && !result_r.closed?
             raise
+        end
 
-        ensure
-            initial_r.close if initial_r && !initial_r.closed?
-            initial_w.close if initial_w && !initial_r.closed?
-            result_w.close  if result_w && !result_w.closed?
+        # Write as much of the initial dump to the slave
+        #
+        # To avoid blocking in {#spawn}, the initial dump 
+        def write_initial_dump
+            if !initial_dump.empty?
+                begin
+                    written_bytes = initial_w.write_nonblock(initial_dump)
+                rescue IO::WaitWritable
+                    written_bytes = 0
+                end
+
+                @initial_dump = @initial_dump[written_bytes, initial_dump.size - written_bytes]
+                initial_dump.empty?
+            else
+                true
+            end
         end
 
         # Whether this slave would need to be spawned, either because it has
@@ -214,6 +253,7 @@ class Autorespawn
             end
             @success = @success && status.success?
             result_r.close
+            initial_w.close
             modified
         end
 

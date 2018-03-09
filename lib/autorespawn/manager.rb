@@ -247,7 +247,7 @@ class Autorespawn
             new_slaves = Array.new
 
             trigger_slaves_as_necessary
-            active_slaves.each_value.each(&:write_initial_dump)
+            active_slaves.each_value(&:poll)
 
             while active_slaves.size < parallel_level + 1
                 if slave = queued_slaves.find { |s| !s.running? }

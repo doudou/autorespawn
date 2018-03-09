@@ -25,5 +25,6 @@ class Autorespawn
         def finished?
             false
         end
+        def poll; end
     end
 end

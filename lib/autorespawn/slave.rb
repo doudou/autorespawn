@@ -136,22 +136,25 @@ class Autorespawn
             raise
         end
 
+        # Must be called regularly to ensure a good communication with the slave
+        def poll
+            return unless running?
+
+            write_initial_dump
+            read_queued_result
+        end
+
         # Write as much of the initial dump to the slave
         #
         # To avoid blocking in {#spawn}, the initial dump 
         def write_initial_dump
-            if !initial_dump.empty?
-                begin
-                    written_bytes = initial_w.write_nonblock(initial_dump)
-                rescue IO::WaitWritable
-                    written_bytes = 0
-                end
+            return if initial_dump.empty?
 
-                @initial_dump = @initial_dump[written_bytes, initial_dump.size - written_bytes]
-                initial_dump.empty?
-            else
-                true
-            end
+            written_bytes = initial_w.write_nonblock(initial_dump)
+            @initial_dump = @initial_dump[written_bytes, initial_dump.size - written_bytes]
+            initial_dump.empty?
+        rescue IO::WaitWritable
+            true
         end
 
         # Whether this slave would need to be spawned, either because it has
